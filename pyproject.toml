@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voxbridge"
+version = "1.0.0"
+description = "VoxBridge: convert VoxEdit glTF/GLB assets to engine-ready files for Unity and Roblox"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{ name = "Abdulkareem Oyeneye/Dapps over Apps.", email = "team@dappsoverapps.com" }]
+keywords = ["gltf", "glb", "voxedit", "unity", "roblox", "3d", "converter", "assets"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+]
+dependencies = [
+  "rich>=13.0.0",
+  "typer>=0.12.0",
+  "pygltflib>=1.16.0",
+  "Pillow>=10.0.0",
+  "numpy>=1.24.0",
+  "scipy>=1.10.0",
+  "jsonschema>=4.21.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/Supercoolkayy/voxbridge"
+Documentation = "https://supercoolkayy.github.io/voxbridge/"
+Issues = "https://github.com/Supercoolkayy/voxbridge/issues"
+Source = "https://github.com/Supercoolkayy/voxbridge"
+Repository = "https://github.com/Supercoolkayy/voxbridge"
+
+[project.scripts]
+voxbridge = "voxbridge.cli:main"
+voxbridge-gui = "voxbridge.gui.app:run"
+
+[tool.setuptools.packages.find]
+include = ["voxbridge*"]
+exclude = ["myenv*", "tests*", "examples*", "scripts*", "docs*"]
+
+[tool.setuptools.package-data]
+voxbridge = ["reporting/schema/*.json", "gui/assets/*"]
+
+[tool.setuptools]
+zip-safe = false 
