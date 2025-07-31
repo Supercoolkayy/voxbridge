@@ -96,6 +96,11 @@ class VoxBridgeConverter:
                     if clean_name != original_name:
                         material['name'] = clean_name
                         changes_made.append(f"Cleaned material {i}: '{original_name}' → '{clean_name}'")
+                    
+                    # Handle empty names
+                    if not clean_name:
+                        material['name'] = 'Material'
+                        changes_made.append(f"Fixed empty material {i}: '' → 'Material'")
         
         return gltf_data, changes_made
     
@@ -329,7 +334,7 @@ class VoxBridgeConverter:
         
         return clean_name
 
-    def generate_performance_report(self, input_path: Path, output_path: Path, stats: Dict, changes: List[str] = None) -> Dict:
+    def generate_performance_report(self, input_path: Path, output_path: Path, stats: Dict, changes: Optional[List[str]] = None) -> Dict:
         """
         Generate a performance summary report in JSON format.
         Args:

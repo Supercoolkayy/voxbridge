@@ -13,7 +13,7 @@ def resize_texture(image_path, max_size=1024):
     """
     img = Image.open(image_path)
     if max(img.size) > max_size:
-        img.thumbnail((max_size, max_size), Image.ANTIALIAS)
+        img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         img.save(image_path)
     return image_path
 
@@ -31,7 +31,7 @@ def generate_texture_atlas(image_paths, atlas_size=1024):
     for idx, img in enumerate(images):
         row, col = divmod(idx, grid_size)
         x, y = col * cell_size, row * cell_size
-        img_resized = img.resize((cell_size, cell_size), Image.ANTIALIAS)
+        img_resized = img.resize((cell_size, cell_size), Image.Resampling.LANCZOS)
         atlas.paste(img_resized, (x, y))
         mapping[image_paths[idx]] = {
             'uv': [x / atlas_size, y / atlas_size, (x + cell_size) / atlas_size, (y + cell_size) / atlas_size],

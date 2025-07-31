@@ -5,6 +5,7 @@ Unit tests for VoxBridge converter module
 
 import json
 import unittest
+import subprocess
 from pathlib import Path
 import tempfile
 import shutil
@@ -119,7 +120,7 @@ class TestVoxBridgeConverter(unittest.TestCase):
         self.assertEqual(materials[2]['name'], 'GoodName')  # Should be unchanged
         
         # Check that changes were recorded
-        self.assertEqual(len(changes), 2)  # Two materials were changed
+        self.assertEqual(len(changes), 4)  # Two materials were changed + two texture paths
         self.assertIn('Material_1_Special', changes[0])
         self.assertIn('Another_Bad_Name', changes[1])
     
@@ -345,7 +346,7 @@ class TestVoxBridgeConverter(unittest.TestCase):
         success = self.converter.convert_file(input_path, output_path, use_blender=True)
         
         self.assertTrue(success)
-        mock_convert_blender.assert_called_once_with(input_path, output_path)
+        mock_convert_blender.assert_called_once_with(input_path, output_path, optimize_mesh=False)
     
     def test_convert_file_creates_output_directory(self):
         """Test that convert_file creates output directory if it doesn't exist"""
