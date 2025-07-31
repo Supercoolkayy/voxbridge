@@ -52,15 +52,15 @@ def main():
         return False
     
     # List built files
-    print("\n📦 Built files:")
+    print("\nBuilt files:")
     dist_dir = Path("dist")
     if dist_dir.exists():
         for file in dist_dir.glob("*"):
             print(f"  {file}")
     
     print("\n" + "=" * 50)
-    print("🎉 Build test completed successfully!")
-    print("✅ Ready to push to GitHub and create a release!")
+    print("Build test completed successfully!")
+    print("Ready to push to GitHub and create a release!")
     
     return True
 
