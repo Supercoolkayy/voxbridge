@@ -58,7 +58,7 @@ voxbridge-gui
 ```bash
 # Switch to WSL Ubuntu
 wsl
-cd /home/emmzycode/voxbridge
+cd /home/username/voxbridge
 
 # Run automated release script
 bash scripts/release.sh
@@ -69,7 +69,7 @@ bash scripts/release.sh
 ```bash
 # 1. Test in WSL Ubuntu
 wsl
-cd /home/emmzycode/voxbridge
+cd /home/username/voxbridge
 voxbridge --help
 voxbridge doctor
 
@@ -86,7 +86,7 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```
 
-## 🤖 **GitHub Actions Automation**
+## **GitHub Actions Automation**
 
 The `.github/workflows/release.yml` workflow will automatically:
 
@@ -95,10 +95,6 @@ The `.github/workflows/release.yml` workflow will automatically:
 - Publish to PyPI
 - Create GitHub Release with artifacts
 
-### **Required Setup**
-
-1. **PyPI API Token**: Set `PYPI_API_TOKEN` in GitHub repository secrets
-2. **Repository Permissions**: Ensure Actions can write to repository
 
 ## **Package Information**
 
@@ -106,7 +102,6 @@ The `.github/workflows/release.yml` workflow will automatically:
 
 - **Name**: voxbridge
 - **Version**: 1.0.0
-- **Author**: Abdulkareem Oyeneye/Dapps over Apps.
 - **Email**: team@dappsoverapps.com
 - **GitHub**: https://github.com/Supercoolkayy/voxbridge
 - **License**: MIT
@@ -155,7 +150,7 @@ voxbridge doctor
 voxbridge help
 ```
 
-## 📁 **File Structure**
+## **File Structure**
 
 ```
 voxbridge/
@@ -207,7 +202,7 @@ voxbridge/
 - [ ] GUI launches: `voxbridge-gui`
 - [ ] Documentation accessible
 
-## 🌐 **Public URLs**
+## **Public URLs**
 
 ### **After Release**
 
@@ -244,7 +239,7 @@ voxbridge-gui
 - Functional CLI and GUI
 - Professional presentation
 
-## 🎉 **Release Ready**
+## **Release Ready**
 
 VoxBridge v1.0.0 is ready for public release with:
 
