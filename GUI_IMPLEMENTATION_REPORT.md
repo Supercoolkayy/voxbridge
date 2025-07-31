@@ -149,7 +149,7 @@ class VoxBridgeGUI:
 - **Message Queue**: Thread-safe communication
 - **Progress Updates**: Real-time status updates
 
-## 🧪 Testing Results
+## Testing Results
 
 ### GUI Test Suite
 
@@ -262,7 +262,7 @@ voxbridge-gui
 - **Progress Tracking**: Real-time conversion progress
 - **Logging**: Detailed conversion logs
 
-## 🎉 Status: GUI Implementation Complete
+## Status: GUI Implementation Complete
 
 The VoxBridge GUI is **fully implemented and ready for use** with:
 
