@@ -121,8 +121,11 @@ class TestVoxBridgeConverter(unittest.TestCase):
         
         # Check that changes were recorded
         self.assertEqual(len(changes), 4)  # Two materials were changed + two texture paths
-        self.assertIn('Material_1_Special', changes[0])
-        self.assertIn('Another_Bad_Name', changes[1])
+        # Find material changes (they might be in different positions)
+        material_changes = [c for c in changes if 'Cleaned material' in c]
+        self.assertEqual(len(material_changes), 2)
+        self.assertTrue(any('Material_1_Special' in c for c in material_changes))
+        self.assertTrue(any('Another_Bad_Name' in c for c in material_changes))
     
     def test_clean_gltf_json_texture_paths(self):
         """Test cleaning of texture paths"""

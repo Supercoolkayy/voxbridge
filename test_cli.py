@@ -14,13 +14,13 @@ def test_cli_help():
         result = subprocess.run([sys.executable, "-m", "voxbridge.cli", "--help"], 
                               capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
-            print("✅ CLI help works")
+            print("CLI help works")
             return True
         else:
-            print(f"❌ CLI help failed: {result.stderr}")
+            print(f"CLI help failed: {result.stderr}")
             return False
     except Exception as e:
-        print(f"❌ CLI help error: {e}")
+                    print(f"CLI help error: {e}")
         return False
 
 def test_cli_doctor():
@@ -30,13 +30,13 @@ def test_cli_doctor():
         result = subprocess.run([sys.executable, "-m", "voxbridge.cli", "doctor"], 
                               capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
-            print("✅ CLI doctor works")
+            print("CLI doctor works")
             return True
         else:
-            print(f"❌ CLI doctor failed: {result.stderr}")
+            print(f"CLI doctor failed: {result.stderr}")
             return False
     except Exception as e:
-        print(f"❌ CLI doctor error: {e}")
+                    print(f"CLI doctor error: {e}")
         return False
 
 def test_cli_convert_help():
@@ -46,7 +46,7 @@ def test_cli_convert_help():
         result = subprocess.run([sys.executable, "-m", "voxbridge.cli", "convert", "--help"], 
                               capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
-            print("✅ CLI convert help works")
+            print("CLI convert help works")
             return True
         else:
             print(f"❌ CLI convert help failed: {result.stderr}")

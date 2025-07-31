@@ -78,8 +78,11 @@ class VoxBridgeConverter:
                 if 'uri' in image:
                     original_uri = image['uri']
                     # Convert absolute paths to just filename
-                    if '\\' in original_uri or '/' in original_uri:
-                        filename = Path(original_uri).name
+                    # Check for both backslashes and forward slashes, and also handle escaped backslashes
+                    if '\\' in original_uri or '/' in original_uri or '\\\\' in original_uri:
+                        # Handle both single and double backslashes
+                        clean_uri = original_uri.replace('\\\\', '\\').replace('\\', '/')
+                        filename = Path(clean_uri).name
                         image['uri'] = filename
                         changes_made.append(f"Fixed image {i}: {original_uri} → {filename}")
         
@@ -213,6 +216,10 @@ class VoxBridgeConverter:
                         resize_texture(img_path, max_size=1024)
                     else:
                         print(f"PIL not available, skipping texture optimization for {img_path}")
+            # Write cleaned glTF first
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(gltf_data, f, indent=2)
+            
             # Generate texture atlas if requested
             if generate_atlas and image_paths:
                 atlas_img, mapping = generate_texture_atlas(image_paths, atlas_size=1024)
@@ -220,9 +227,6 @@ class VoxBridgeConverter:
                 atlas_path = input_dir / atlas_filename
                 atlas_img.save(atlas_path)
                 update_gltf_with_atlas(output_path, mapping, atlas_filename)
-            # Write cleaned glTF (before atlas update)
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(gltf_data, f, indent=2)
             # Copy associated files (textures, bin files)
             self.copy_associated_files(input_path, output_path)
             return True

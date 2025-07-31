@@ -29,6 +29,11 @@ jobs:
       - name: Check package
         run: python -m twine check dist/*
 
+      - name: List built files
+        run: |
+          echo "Built package files:"
+          ls -la dist/
+
       - name: Publish to PyPI
         run: python -m twine upload dist/*
         env:

@@ -13,10 +13,10 @@ def test_gui_import():
     print("Testing GUI module import...")
     try:
         from voxbridge.gui.app import run, VoxBridgeGUI
-        print("✅ GUI module imports successfully")
+        print("GUI module imports successfully")
         return True
     except Exception as e:
-        print(f"❌ GUI module import error: {e}")
+        print(f"GUI module import error: {e}")
         return False
 
 def test_gui_launch():
@@ -39,10 +39,10 @@ def test_gui_launch():
         assert hasattr(app, 'run_system_check')
         
         root.destroy()
-        print("✅ GUI launches successfully")
+                    print("GUI launches successfully")
         return True
     except Exception as e:
-        print(f"❌ GUI launch error: {e}")
+                    print(f"GUI launch error: {e}")
         return False
 
 def test_gui_components():
@@ -76,10 +76,10 @@ def test_gui_components():
         assert hasattr(app, 'validate_inputs')
         
         root.destroy()
-        print("✅ All GUI components present")
+                    print("All GUI components present")
         return True
     except Exception as e:
-        print(f"❌ GUI components error: {e}")
+                    print(f"GUI components error: {e}")
         return False
 
 def test_gui_entry_point():
@@ -90,17 +90,17 @@ def test_gui_entry_point():
                               capture_output=True, text=True, timeout=5)
         # Should not fail with import error
         if "ImportError" not in result.stderr and "ModuleNotFoundError" not in result.stderr:
-            print("✅ GUI entry point works")
+            print("GUI entry point works")
             return True
         else:
-            print(f"❌ GUI entry point failed: {result.stderr}")
+            print(f"GUI entry point failed: {result.stderr}")
             return False
     except subprocess.TimeoutExpired:
         # GUI might be waiting for user input, which is expected
-        print("✅ GUI entry point launches (timeout expected)")
+                    print("GUI entry point launches (timeout expected)")
         return True
     except Exception as e:
-        print(f"❌ GUI entry point error: {e}")
+                    print(f"GUI entry point error: {e}")
         return False
 
 def test_wsl_compatibility():
@@ -120,23 +120,23 @@ def test_wsl_compatibility():
             pass
         
         if is_wsl:
-            print("✅ Running in WSL environment")
+            print("Running in WSL environment")
         else:
-            print("ℹ️  Not running in WSL (this is OK)")
+            print("Not running in WSL (this is OK)")
         
         # Test tkinter availability
         try:
             root = tk.Tk()
             root.withdraw()
             root.destroy()
-            print("✅ Tkinter available")
+            print("Tkinter available")
             return True
         except Exception as e:
-            print(f"❌ Tkinter not available: {e}")
+            print(f"Tkinter not available: {e}")
             return False
             
     except Exception as e:
-        print(f"❌ WSL compatibility test error: {e}")
+                    print(f"WSL compatibility test error: {e}")
         return False
 
 def main():
@@ -163,7 +163,7 @@ def main():
     print(f"Results: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All GUI tests passed!")
+                    print("All GUI tests passed!")
         print("\nGUI Features Verified:")
         print("✅ File selection (GLB input)")
         print("✅ Target export dropdown (Unity/Roblox)")
@@ -173,7 +173,7 @@ def main():
         print("✅ WSL GUI-capable environment support")
         return 0
     else:
-        print("❌ Some GUI tests failed")
+                    print("Some GUI tests failed")
         return 1
 
 if __name__ == "__main__":

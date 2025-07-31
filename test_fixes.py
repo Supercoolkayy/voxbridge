@@ -36,11 +36,11 @@ def test_texture_path_cleaning():
         assert images[1]['uri'] == 'texture2.jpg', f"Expected 'texture2.jpg', got '{images[1]['uri']}'"
         assert images[2]['uri'] == 'relative_texture.png', f"Expected 'relative_texture.png', got '{images[2]['uri']}'"
         
-        print("✅ Texture path cleaning test passed!")
+        print("Texture path cleaning test passed!")
         return True
         
     except Exception as e:
-        print(f"❌ Texture path cleaning test failed: {e}")
+        print(f"Texture path cleaning test failed: {e}")
         return False
     finally:
         gltf_path.unlink()
@@ -75,11 +75,11 @@ def test_material_name_cleaning():
         assert materials[2]['name'] == 'GoodName', f"Expected 'GoodName', got '{materials[2]['name']}'"
         assert materials[3]['name'] == 'Material', f"Expected 'Material', got '{materials[3]['name']}'"
         
-        print("✅ Material name cleaning test passed!")
+        print("Material name cleaning test passed!")
         return True
         
     except Exception as e:
-        print(f"❌ Material name cleaning test failed: {e}")
+        print(f"Material name cleaning test failed: {e}")
         return False
     finally:
         gltf_path.unlink()
@@ -102,14 +102,14 @@ def test_pil_compatibility():
             # Test resize function
             result_path = resize_texture(img_path)
             assert result_path.exists(), "Resized image should exist"
-            print("✅ PIL compatibility test passed!")
+            print("PIL compatibility test passed!")
             return True
             
         finally:
             img_path.unlink()
             
     except Exception as e:
-        print(f"❌ PIL compatibility test failed: {e}")
+        print(f"PIL compatibility test failed: {e}")
         return False
 
 def main():
@@ -131,12 +131,12 @@ def main():
         print()
     
     print("=" * 50)
-    print(f"📊 Results: {passed}/{total} tests passed")
+            print(f"Results: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All tests passed! The fixes are working.")
+        print("All tests passed! The fixes are working.")
     else:
-        print("⚠️  Some tests failed. Please check the issues above.")
+        print("Some tests failed. Please check the issues above.")
 
 if __name__ == "__main__":
     main() 

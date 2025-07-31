@@ -379,7 +379,7 @@ def run_doctor():
             # Check Blender
             blender_ok, blender_info = check_blender()
             table.add_row("Blender", 
-                         "[green]✓ PASS[/green]" if blender_ok else "[yellow]⚠ WARN[/yellow]", 
+                         "[green]PASS[/green]" if blender_ok else "[yellow]WARN[/yellow]", 
                          blender_info)
             
             # Check GPU
@@ -398,7 +398,7 @@ def run_doctor():
         if py_ok and blender_ok:
             safe_print("[green]✓ System is ready for VoxBridge![/green]")
         elif py_ok:
-            safe_print("[yellow]⚠ System ready with basic functionality (Blender recommended)[/yellow]")
+            safe_print("[yellow]System ready with basic functionality (Blender recommended)[/yellow]")
         else:
             safe_print("[red]✗ System needs attention[/red]")
             
@@ -427,7 +427,7 @@ def run_doctor():
         if py_ok and blender_ok:
             print("✓ System is ready for VoxBridge!")
         elif py_ok:
-            print("⚠ System ready with basic functionality (Blender recommended)")
+            print("System ready with basic functionality (Blender recommended)")
         else:
             print("✗ System needs attention")
 

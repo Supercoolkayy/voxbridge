@@ -196,10 +196,10 @@ rm -rf test_assets test_output
 print_status "All tests completed successfully!"
 
 echo ""
-echo "📊 Test Summary:"
+echo "Test Summary:"
 echo "  ✅ Unit tests passed"
 echo "  ✅ CLI functionality verified"
 echo "  ✅ Error handling works"
 echo "  ✅ Performance acceptable"
 echo ""
-echo "🎉 VoxBridge is ready for use!"
+echo "VoxBridge is ready for use!"
