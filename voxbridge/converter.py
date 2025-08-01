@@ -123,24 +123,38 @@ class VoxBridgeConverter:
             
         stats['file_size'] = output_path.stat().st_size
         
-        # For .glb files, we can't easily parse without specialized tools
-        if output_path.suffix.lower() == '.glb':
-            stats['note'] = 'GLB format - use Blender for detailed analysis'
-            return stats
-        
-        # For .gltf files, parse JSON
-        if output_path.suffix.lower() == '.gltf':
-            try:
-                with open(output_path, 'r', encoding='utf-8') as f:
-                    gltf_data = json.load(f)
+        # Try to parse both glTF and GLB files using pygltflib
+        try:
+            import pygltflib
+            gltf = pygltflib.GLTF2().load(str(output_path))
+            
+            # Extract statistics from the parsed glTF/GLB
+            stats['materials'] = len(gltf.materials) if gltf.materials else 0
+            stats['textures'] = len(gltf.images) if gltf.images else 0
+            stats['meshes'] = len(gltf.meshes) if gltf.meshes else 0
+            stats['nodes'] = len(gltf.nodes) if gltf.nodes else 0
+            
+        except ImportError:
+            # Fallback for when pygltflib is not available
+            if output_path.suffix.lower() == '.glb':
+                stats['note'] = 'GLB format - pygltflib not available for detailed analysis'
+            elif output_path.suffix.lower() == '.gltf':
+                try:
+                    with open(output_path, 'r', encoding='utf-8') as f:
+                        gltf_data = json.load(f)
+                    
+                    stats['materials'] = len(gltf_data.get('materials', []))
+                    stats['textures'] = len(gltf_data.get('images', []))
+                    stats['meshes'] = len(gltf_data.get('meshes', []))
+                    stats['nodes'] = len(gltf_data.get('nodes', []))
+                    
+                except Exception as e:
+                    stats['error'] = str(e)
+            else:
+                stats['error'] = 'Unsupported file format'
                 
-                stats['materials'] = len(gltf_data.get('materials', []))
-                stats['textures'] = len(gltf_data.get('images', []))
-                stats['meshes'] = len(gltf_data.get('meshes', []))
-                stats['nodes'] = len(gltf_data.get('nodes', []))
-                
-            except Exception as e:
-                stats['error'] = str(e)
+        except Exception as e:
+            stats['error'] = f'Failed to parse file: {str(e)}'
         
         return stats
     
