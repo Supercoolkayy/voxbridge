@@ -60,14 +60,14 @@ def safe_print(message: str, style: str = ""):
 def print_header():
     """Print VoxBridge header"""
     if RICH_AVAILABLE:
-        title = Text("VoxBridge v1.0.0", style="bold cyan")
+        title = Text("VoxBridge v1.0.1", style="bold cyan")
         subtitle = Text("VoxEdit to Unity/Roblox Converter", style="dim white")
         version = Text("Professional Asset Converter", style="italic green")
         if console:
             console.print(Panel.fit(f"{title}\n{subtitle}\n{version}", 
                                    border_style="cyan", padding=(0, 1)))
     else:
-        print("VoxBridge v1.0.0 - VoxEdit to Unity/Roblox Converter")
+        print("VoxBridge v1.0.1 - VoxEdit to Unity/Roblox Converter")
         print("Professional Asset Converter")
         print("=" * 55)
 
@@ -98,52 +98,52 @@ def print_validation_results(stats: dict):
     if RICH_AVAILABLE:
         safe_print("[bold magenta]Validation Results[/bold magenta]")
         
-        if stats['file_exists']:
-            if console:
-                table = Table(show_header=False, box=None, show_edge=False)
-                table.add_column("Metric", style="bold green", no_wrap=True, width=12)
-                table.add_column("Value", style="white")
-                
-                table.add_row("File Size", f"{stats['file_size']:,} bytes")
-                
-                if 'materials' in stats and stats['materials'] > 0:
-                    table.add_row("Materials", str(stats['materials']))
-                    table.add_row("Textures", str(stats['textures']))
-                    table.add_row("Meshes", str(stats['meshes']))
-                    table.add_row("Nodes", str(stats['nodes']))
-                
-                console.print(table)
-            
-            if 'note' in stats:
-                safe_print(f"[yellow]Note:[/yellow] {stats['note']}")
-                
-            if 'error' in stats:
-                safe_print(f"[red]Warning:[/red] {stats['error']}")
-            
-            safe_print("\n[bold green]Ready for import into Unity and Roblox![/bold green]")
+        # Create a table for validation results
+        table = Table(show_header=False, box=None, show_edge=False)
+        table.add_column("Metric", style="bold cyan", no_wrap=True, width=15)
+        table.add_column("Value", style="white")
+        
+        if stats.get('file_exists'):
+            table.add_row("File Created", f"[OK] {stats.get('file_size', 0):,} bytes")
         else:
-            safe_print("[red]Error: Output file was not created[/red]")
+            table.add_row("File Created", "[FAILED]")
+            
+        if 'materials' in stats:
+            table.add_row("Materials", f"[MATERIALS] {stats['materials']}")
+        if 'textures' in stats:
+            table.add_row("Textures", f"[TEXTURES] {stats['textures']}")
+        if 'meshes' in stats:
+            table.add_row("Meshes", f"[MESHES] {stats['meshes']}")
+        if 'nodes' in stats:
+            table.add_row("Nodes", f"[NODES] {stats['nodes']}")
+        if 'note' in stats:
+            table.add_row("Note", f"[INFO] {stats['note']}")
+        if 'error' in stats:
+            table.add_row("Error", f"[ERROR] {stats['error']}")
+            
+        if console:
+            console.print(table)
+            console.print()
     else:
         print("[STATS] Validation Results:")
-        
-        if stats['file_exists']:
-            print(f"  [OK] File created: {stats['file_size']:,} bytes")
-            
-            if 'materials' in stats and stats['materials'] > 0:
-                print(f"  [MAT] Materials: {stats['materials']}")
-                print(f"  [TEX] Textures: {stats['textures']}")
-                print(f"  [MESH] Meshes: {stats['meshes']}")
-                print(f"  [NODE] Nodes: {stats['nodes']}")
-                
-            if 'note' in stats:
-                print(f"  [INFO] {stats['note']}")
-                
-            if 'error' in stats:
-                print(f"  [WARN] Warning: {stats['error']}")
-                
-            print(f"\n[READY] Ready for import into Unity and Roblox!")
+        if stats.get('file_exists'):
+            print(f"  [OK] File created: {stats.get('file_size', 0):,} bytes")
         else:
-            print("  [ERROR] Output file was not created")
+            print(f"  [ERROR] File creation failed")
+            
+        if 'materials' in stats:
+            print(f"  [INFO] Materials: {stats['materials']}")
+        if 'textures' in stats:
+            print(f"  [INFO] Textures: {stats['textures']}")
+        if 'meshes' in stats:
+            print(f"  [INFO] Meshes: {stats['meshes']}")
+        if 'nodes' in stats:
+            print(f"  [INFO] Nodes: {stats['nodes']}")
+        if 'note' in stats:
+            print(f"  [INFO] {stats['note']}")
+        if 'error' in stats:
+            print(f"  [ERROR] {stats['error']}")
+        print()
 
 
 def handle_conversion(
@@ -177,10 +177,10 @@ def handle_conversion(
         # Show progress with Rich if available
         if RICH_AVAILABLE and not verbose:
             with Progress(
-                SpinnerColumn(spinner_name="dots", style="bold cyan"),
-                TextColumn("[progress.description]{task.description}", style="bold white"),
-                BarColumn(bar_width=40, style="cyan", complete_style="green"),
-                TimeElapsedColumn(style="dim white"),
+                SpinnerColumn(spinner_name="dots"),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(bar_width=40),
+                TimeElapsedColumn(),
                 console=console
             ) as progress:
                 task = progress.add_task("[bold cyan]Initializing...", total=None)
@@ -250,6 +250,7 @@ def handle_conversion(
                 print("[PROCESS] Processing with basic cleanup...")
             
             # Perform conversion
+            print("[PROCESS] Converting file...")
             success = converter.convert_file(
                 input_path, output_path, use_blender,
                 optimize_mesh=optimize_mesh,
@@ -261,175 +262,122 @@ def handle_conversion(
             if success:
                 print("[SUCCESS] Conversion completed successfully!")
             else:
-                print("[ERROR] Conversion failed")
+                print("[ERROR] Conversion failed!")
                 return False
         
         # Validate output
-        print()
-        stats = converter.validate_output(output_path)
-        print_validation_results(stats)
-        
-        # Generate performance report if requested
-        if generate_report:
-            processing_time = time.time() - start_time
-            report = converter.generate_performance_report(
-                input_path, output_path, stats, 
-                changes=[]  # TODO: Collect changes during processing
-            )
-            report["processing_time"] = round(processing_time, 2)
+        if output_path.exists():
+            stats = converter.validate_output(output_path)
+            print_validation_results(stats)
             
-            report_path = converter.save_performance_report(report, output_path.parent)
-            print(f"[REPORT] Performance report saved: {report_path}")
+            # Generate performance report if requested
+            if generate_report:
+                processing_time = time.time() - start_time
+                report = converter.generate_performance_report(
+                    input_path, output_path, stats, 
+                    changes=getattr(converter, 'last_changes', [])
+                )
+                report['processing_time'] = processing_time
+                
+                report_path = converter.save_performance_report(report, output_path.parent)
+                safe_print(f"[bold green]Performance report saved:[/bold green] {report_path}")
         
+        safe_print("[bold green]Ready for import into Unity and Roblox![/bold green]")
+        safe_print("[bold cyan]VoxBridge conversion complete![/bold cyan]")
         return True
-            
-    except BlenderNotFoundError as e:
-        print(f"[ERROR] Blender Error: {e}")
-        print("   Try using --no-blender for basic JSON cleanup")
-        return False
-        
-    except ConversionError as e:
-        print(f"[ERROR] Conversion Error: {e}")
-        return False
         
     except Exception as e:
-        print(f"[ERROR] Unexpected Error: {e}")
+        safe_print(f"[bold red]Unexpected Error:[/bold red] {str(e)}")
         if verbose:
             import traceback
-            traceback.print_exc()
+            safe_print("[dim]Traceback:[/dim]")
+            safe_print(traceback.format_exc())
         return False
 
 
 def check_python_version():
     """Check Python version compatibility"""
     version = sys.version_info
-    if version.major == 3 and version.minor >= 9:
-        return True, f"Python {version.major}.{version.minor}.{version.micro}"
-    else:
-        return False, f"Python {version.major}.{version.minor}.{version.micro} (requires 3.9+)"
+    if version < (3, 9):
+        return False, f"Python {version.major}.{version.minor} detected. Python 3.9+ required."
+    return True, f"Python {version.major}.{version.minor} ✓"
 
 
 def check_blender():
     """Check if Blender is available"""
     try:
         converter = VoxBridgeConverter()
-        blender_exe = converter.find_blender()
-        if blender_exe:
-            return True, str(blender_exe)
+        blender_path = converter.find_blender()
+        if blender_path:
+            return True, f"Blender found: {blender_path}"
         else:
-            return False, "Not found in PATH"
+            return False, "Blender not found in PATH"
     except Exception as e:
-        return False, f"Error: {e}"
+        return False, f"Blender check failed: {str(e)}"
 
 
 def check_gpu_info():
-    """Check basic GPU information if available"""
+    """Check GPU information"""
     try:
-        # Try to get GPU info using various methods
-        if platform.system() == "Windows":
-            try:
-                result = subprocess.run(["wmic", "path", "win32_VideoController", "get", "name"], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    lines = result.stdout.strip().split('\n')
-                    if len(lines) > 1:
-                        return True, lines[1].strip()
-            except:
-                pass
-        elif platform.system() == "Linux":
-            try:
-                result = subprocess.run(["lspci", "-v"], capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and "VGA" in result.stdout:
-                    return True, "GPU detected (Linux)"
-            except:
-                pass
-        elif platform.system() == "Darwin":
-            try:
-                result = subprocess.run(["system_profiler", "SPDisplaysDataType"], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    return True, "GPU detected (macOS)"
-            except:
-                pass
-        
-        return False, "Not detected"
+        import subprocess
+        result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            gpu_info = result.stdout.strip().split(',')
+            if len(gpu_info) >= 2:
+                return True, f"GPU: {gpu_info[0].strip()} ({gpu_info[1].strip()}MB)"
+        return False, "GPU information not available"
     except Exception:
-        return False, "Error checking GPU"
+        return False, "GPU check failed"
 
 
 def run_doctor():
     """Run system diagnostics"""
-    if RICH_AVAILABLE:
-        safe_print("[bold cyan]VoxBridge System Diagnostics[/bold cyan]")
-        safe_print("=" * 50)
-        
-        if console:
-            # Create results table
-            table = Table(show_header=True)
-            table.add_column("Component", style="bold cyan")
-            table.add_column("Status", style="bold")
-            table.add_column("Details", style="white")
-            
-            # Check Python version
-            py_ok, py_info = check_python_version()
-            table.add_row("Python Version", 
-                         "[green]✓ PASS[/green]" if py_ok else "[red]✗ FAIL[/red]", 
-                         py_info)
-            
-            # Check Blender
-            blender_ok, blender_info = check_blender()
-            table.add_row("Blender", 
-                         "[green]PASS[/green]" if blender_ok else "[yellow]WARN[/yellow]", 
-                         blender_info)
-            
-            # Check GPU
-            gpu_ok, gpu_info = check_gpu_info()
-            table.add_row("GPU Info", 
-                         "[green]✓ PASS[/green]" if gpu_ok else "[dim]? UNKNOWN[/dim]", 
-                         gpu_info)
-            
-            # Check Rich availability
-            table.add_row("Rich UI", "[green]✓ PASS[/green]", "Available")
-            
-            console.print(table)
-        
-        # Summary
-        safe_print("\n[bold]Summary:[/bold]")
-        if py_ok and blender_ok:
-            safe_print("[green]✓ System is ready for VoxBridge![/green]")
-        elif py_ok:
-            safe_print("[yellow]System ready with basic functionality (Blender recommended)[/yellow]")
-        else:
-            safe_print("[red]✗ System needs attention[/red]")
-            
+    print_header()
+    safe_print("[bold yellow]System Diagnostics[/bold yellow]")
+    safe_print("=" * 40)
+    
+    # Check Python version
+    py_ok, py_msg = check_python_version()
+    if py_ok:
+        safe_print(f"[OK] {py_msg}")
     else:
-        print("VoxBridge System Diagnostics")
-        print("=" * 50)
-        
-        # Check Python version
-        py_ok, py_info = check_python_version()
-        status = "PASS" if py_ok else "FAIL"
-        print(f"Python Version: {status} - {py_info}")
-        
-        # Check Blender
-        blender_ok, blender_info = check_blender()
-        status = "PASS" if blender_ok else "WARN"
-        print(f"Blender: {status} - {blender_info}")
-        
-        # Check GPU
-        gpu_ok, gpu_info = check_gpu_info()
-        status = "PASS" if gpu_ok else "UNKNOWN"
-        print(f"GPU Info: {status} - {gpu_info}")
-        
-        print(f"Rich UI: PASS - Available")
-        
-        print("\nSummary:")
-        if py_ok and blender_ok:
-            print("✓ System is ready for VoxBridge!")
-        elif py_ok:
-            print("System ready with basic functionality (Blender recommended)")
-        else:
-            print("✗ System needs attention")
+        safe_print(f"[FAILED] {py_msg}")
+    
+    # Check Blender
+    blender_ok, blender_msg = check_blender()
+    if blender_ok:
+        safe_print(f"[OK] {blender_msg}")
+    else:
+        safe_print(f"[WARNING] {blender_msg}")
+        safe_print("[dim]Blender is optional but recommended for GLB processing[/dim]")
+    
+    # Check GPU
+    gpu_ok, gpu_msg = check_gpu_info()
+    if gpu_ok:
+        safe_print(f"[OK] {gpu_msg}")
+    else:
+        safe_print(f"[INFO] {gpu_msg}")
+    
+    # Check dependencies
+    safe_print("\n[bold yellow]Dependencies:[/bold yellow]")
+    dependencies = [
+        ("typer", "CLI framework"),
+        ("rich", "Rich text formatting"),
+        ("pygltflib", "glTF processing"),
+        ("Pillow", "Image processing"),
+        ("numpy", "Numerical operations"),
+        ("scipy", "Scientific computing")
+    ]
+    
+    for dep, desc in dependencies:
+        try:
+            __import__(dep)
+            safe_print(f"[OK] {dep} ({desc})")
+        except ImportError:
+            safe_print(f"[FAILED] {dep} ({desc}) - Missing")
+    
+    safe_print("\n[bold green]Diagnostics complete![/bold green]")
 
 
 @app.command()
@@ -445,161 +393,95 @@ def convert(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output for debugging"),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing output file without confirmation"),
 ):
-    """Convert VoxEdit glTF/glb files for Unity and Roblox compatibility.
-    
-    This command processes VoxEdit exports and optimizes them for game engines.
-    Supports both individual file conversion and batch processing.
-    
-    Examples:
-      voxbridge convert --input model.glb --target unity
-      voxbridge convert --input model.glb --target roblox --optimize-mesh
-      voxbridge convert --input model.glb --target unity --output ./assets/clean_model.glb
-    """
+    """Convert VoxEdit glTF/glb files to Unity/Roblox compatible formats"""
     print_header()
     
-    # Validate target platform
-    if target not in ["unity", "roblox"]:
-        safe_print("[red]Error: Target must be 'unity' or 'roblox'[/red]")
-        raise typer.Exit(1)
-    
-    # Generate output path if not specified
+    # Auto-generate output path if not specified
     if output is None:
         input_stem = input_file.stem
         output = input_file.parent / f"{input_stem}_{target}_clean{input_file.suffix}"
     
-    # Check if output file exists and force flag
+    # Check if output file exists and handle force flag
     if output.exists() and not force:
-        safe_print(f"[red]Error: Output file '{output}' already exists. Use --force to overwrite.[/red]")
+        safe_print(f"[yellow]Warning: Output file '{output}' already exists.[/yellow]")
+        if not typer.confirm("Overwrite existing file?"):
+            safe_print("[red]Conversion cancelled.[/red]")
+            raise typer.Exit(1)
+    
+    # Validate target platform
+    if target.lower() not in ["unity", "roblox"]:
+        safe_print(f"[red]Error: Invalid target '{target}'. Supported: unity, roblox[/red]")
         raise typer.Exit(1)
     
     # Perform conversion
-    use_blender = not no_blender
     success = handle_conversion(
-        input_file, output, use_blender, verbose,
+        input_path=input_file,
+        output_path=output,
+        use_blender=not no_blender,
+        verbose=verbose,
         optimize_mesh=optimize_mesh,
         generate_atlas=generate_atlas,
         compress_textures=compress_textures,
-        platform=target,
+        platform=target.lower(),
         generate_report=report
     )
     
-    if success:
-        safe_print(f"\n[bold green]VoxBridge conversion completed successfully![/bold green]")
-        safe_print(f"[dim]Output:[/dim] {output}")
-    else:
-        safe_print(f"\n[bold red]VoxBridge conversion failed![/bold red]")
+    if not success:
+        safe_print("[bold red]VoxBridge conversion failed![/bold red]")
         raise typer.Exit(1)
 
 
 @app.command()
 def help():
-    """Show detailed help information about VoxBridge capabilities and usage.
-    
-    This command provides comprehensive information about:
-    - What VoxBridge can do
-    - Supported file formats
-    - Target platforms
-    - GUI interface
-    - Examples and best practices
-    """
+    """Show detailed help information"""
     print_header()
+    safe_print("[bold yellow]VoxBridge Help[/bold yellow]")
+    safe_print("=" * 40)
     
-    if RICH_AVAILABLE and console:
-        # Create a comprehensive help panel
-        help_text = """
-[bold cyan]VoxBridge v1.0.0 - Professional Asset Converter[/bold cyan]
-
-[bold]What is VoxBridge?[/bold]
-VoxBridge converts VoxEdit exports (glTF/glb files) into optimized formats
-for Unity and Roblox game engines. It handles mesh optimization, texture
-atlas generation, and platform-specific material mapping.
-
-[bold]Supported Input Formats:[/bold]
-• glTF (.gltf) - VoxEdit JSON exports
-• GLB (.glb) - VoxEdit binary exports
-
-[bold]Target Platforms:[/bold]
-• Unity - Optimized for Unity's asset pipeline
-• Roblox - Optimized for Roblox Studio
-
-[bold]Key Features:[/bold]
-• Mesh optimization and polygon reduction
-• Texture atlas generation
-• Texture compression (1024x1024)
-• Platform-specific material mapping
-• Batch processing capabilities
-• Performance reporting
-• GUI interface for easy use
-
-[bold]Commands:[/bold]
-• [cyan]convert[/cyan] - Convert individual files
-• [cyan]batch[/cyan] - Process multiple files
-• [cyan]doctor[/cyan] - System diagnostics
-• [cyan]help[/cyan] - This detailed help
-
-[bold]GUI Interface:[/bold]
-Run [cyan]voxbridge-gui[/cyan] for a graphical interface with:
-• File selection dialog
-• Target platform dropdown
-• Conversion options
-• Real-time progress tracking
-• Log output panel
-
-[bold]Examples:[/bold]
-• Convert for Unity: [dim]voxbridge convert --input model.glb --target unity[/dim]
-• Convert for Roblox: [dim]voxbridge convert --input model.glb --target roblox --optimize-mesh[/dim]
-• Batch processing: [dim]voxbridge batch ./input ./output --target unity[/dim]
-• System check: [dim]voxbridge doctor[/dim]
-• GUI mode: [dim]voxbridge-gui[/dim]
-
-[bold]For more information:[/bold]
-• GitHub: https://github.com/Supercoolkayy/voxbridge
-• Documentation: https://supercoolkayy.github.io/voxbridge/
-• Issues: https://github.com/Supercoolkayy/voxbridge/issues
-        """
-        console.print(Panel(help_text, title="VoxBridge Help", border_style="cyan"))
-    else:
-        print("VoxBridge v1.0.0 - Professional Asset Converter")
-        print("=" * 60)
-        print()
-        print("What is VoxBridge?")
-        print("VoxBridge converts VoxEdit exports (glTF/glb files) into optimized")
-        print("formats for Unity and Roblox game engines.")
-        print()
-        print("Commands:")
-        print("  convert - Convert individual files")
-        print("  batch   - Process multiple files")
-        print("  doctor  - System diagnostics")
-        print("  help    - This detailed help")
-        print()
-        print("GUI Interface:")
-        print("  Run 'voxbridge-gui' for graphical interface")
-        print()
-        print("Examples:")
-        print("  voxbridge convert --input model.glb --target unity")
-        print("  voxbridge convert --input model.glb --target roblox --optimize-mesh")
-        print("  voxbridge batch ./input ./output --target unity")
-        print("  voxbridge doctor")
-        print("  voxbridge-gui")
-        print()
-        print("For more information: https://github.com/Supercoolkayy/voxbridge")
+    safe_print("[bold cyan]Commands:[/bold cyan]")
+    safe_print("  convert  - Convert single file")
+    safe_print("  batch    - Process multiple files")
+    safe_print("  doctor   - System diagnostics")
+    safe_print("  help     - Show this help")
+    
+    safe_print("\n[bold cyan]Examples:[/bold cyan]")
+    safe_print("  # Basic Unity conversion")
+    safe_print("  voxbridge convert --input model.glb --target unity")
+    
+    safe_print("  # Optimized Roblox conversion")
+    safe_print("  voxbridge convert --input model.glb --target roblox --optimize-mesh --generate-atlas")
+    
+    safe_print("  # Batch processing")
+    safe_print("  voxbridge batch ./input_folder ./output_folder --target unity --recursive")
+    
+    safe_print("  # System check")
+    safe_print("  voxbridge doctor")
+    
+    safe_print("\n[bold cyan]Options:[/bold cyan]")
+    safe_print("  --optimize-mesh      - Enable mesh optimization")
+    safe_print("  --generate-atlas     - Create texture atlas")
+    safe_print("  --compress-textures  - Compress textures to 1024x1024")
+    safe_print("  --no-blender        - Skip Blender processing")
+    safe_print("  --report            - Generate performance report")
+    safe_print("  --verbose           - Show detailed output")
+    safe_print("  --force             - Overwrite existing files")
+    
+    safe_print("\n[bold cyan]Platforms:[/bold cyan]")
+    safe_print("  unity   - Unity 3D engine")
+    safe_print("  roblox  - Roblox Studio")
+    
+    safe_print("\n[bold cyan]File Formats:[/bold cyan]")
+    safe_print("  Input:  .gltf, .glb (VoxEdit exports)")
+    safe_print("  Output: .gltf, .glb (engine-ready)")
+    
+    safe_print("\n[bold cyan]Support:[/bold cyan]")
+    safe_print("  GitHub: https://github.com/Supercoolkayy/voxbridge")
+    safe_print("  Issues: https://github.com/Supercoolkayy/voxbridge/issues")
 
 
 @app.command()
 def doctor():
-    """Run comprehensive system diagnostics to check VoxBridge compatibility.
-    
-    This command checks your system for all requirements needed to run VoxBridge:
-    - Python version compatibility
-    - Required dependencies (rich, typer, etc.)
-    - Blender installation and availability
-    - GPU information for performance optimization
-    - File system permissions
-    
-    Examples:
-      voxbridge doctor
-      voxbridge doctor --verbose
-    """
+    """Run system diagnostics and health check"""
     run_doctor()
 
 
@@ -612,72 +494,92 @@ def batch(
     target: str = typer.Option("unity", "--target", "-t", help="Target platform: unity or roblox"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output for debugging"),
 ):
-    """Process multiple files in batch for efficient bulk conversion.
-    
-    This command allows you to convert multiple VoxEdit exports at once.
-    Perfect for processing entire asset libraries or project folders.
-    
-    Examples:
-      voxbridge batch ./input_folder ./output_folder --target unity
-      voxbridge batch ./models ./processed --target roblox --recursive
-      voxbridge batch ./assets ./clean --pattern "*.glb" --target unity
-    """
+    """Batch process multiple glTF/glb files"""
     print_header()
     
+    # Validate input directory
     if not input_dir.exists():
         safe_print(f"[red]Error: Input directory '{input_dir}' not found[/red]")
+        raise typer.Exit(1)
+    
+    if not input_dir.is_dir():
+        safe_print(f"[red]Error: '{input_dir}' is not a directory[/red]")
         raise typer.Exit(1)
     
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Find files matching pattern
-    patterns = pattern.split(",")
-    files = []
-    for p in patterns:
+    # Parse file patterns
+    patterns = [p.strip() for p in pattern.split(",")]
+    
+    # Find matching files
+    files_to_process = []
+    for pattern in patterns:
         if recursive:
-            files.extend(input_dir.rglob(p.strip()))
+            files_to_process.extend(input_dir.rglob(pattern))
         else:
-            files.extend(input_dir.glob(p.strip()))
+            files_to_process.extend(input_dir.glob(pattern))
     
-    if not files:
-        safe_print(f"[yellow]No files found matching pattern: {pattern}[/yellow]")
-        return
+    if not files_to_process:
+        safe_print(f"[yellow]No files found matching patterns: {patterns}[/yellow]")
+        raise typer.Exit(1)
     
-    safe_print(f"[bold]Found {len(files)} files to process[/bold]")
+    safe_print(f"[bold cyan]Found {len(files_to_process)} files to process[/bold cyan]")
     
-    # Process each file
-    success_count = 0
-    for file_path in files:
-        safe_print(f"[cyan]Processing:[/cyan] {file_path.name}")
+    # Process files
+    converter = VoxBridgeConverter()
+    successful = 0
+    failed = 0
+    
+    for i, file_path in enumerate(files_to_process, 1):
+        if verbose:
+            safe_print(f"\n[bold cyan]Processing {i}/{len(files_to_process)}:[/bold cyan] {file_path.name}")
         
-        # Create output path
-        output_path = output_dir / file_path.name
+        # Generate output path
+        relative_path = file_path.relative_to(input_dir)
+        output_path = output_dir / relative_path.with_suffix(f"_{target}_clean{file_path.suffix}")
         
-        # Convert file
-        success = handle_conversion(
-            file_path, output_path, True, verbose,
-            platform=target
-        )
+        # Create output subdirectory if needed
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        if success:
-            success_count += 1
+        try:
+            success = converter.convert_file(
+                file_path, output_path, use_blender=True,
+                optimize_mesh=False,  # Disable for batch processing
+                generate_atlas=False,  # Disable for batch processing
+                compress_textures=False,  # Disable for batch processing
+                platform=target.lower()
+            )
+            
+            if success:
+                successful += 1
+                if verbose:
+                    safe_print(f"[OK] {file_path.name} -> {output_path.name}")
+            else:
+                failed += 1
+                safe_print(f"[FAILED] Failed to convert {file_path.name}")
+                
+        except Exception as e:
+            failed += 1
+            safe_print(f"[ERROR] Error processing {file_path.name}: {str(e)}")
     
+    # Summary
     safe_print(f"\n[bold green]Batch processing complete![/bold green]")
-    safe_print(f"[dim]Successfully processed:[/dim] {success_count}/{len(files)} files")
+    safe_print(f"  [green]Successful:[/green] {successful}")
+    safe_print(f"  [red]Failed:[/red] {failed}")
+    safe_print(f"  [cyan]Total:[/cyan] {len(files_to_process)}")
 
 
 def main():
-    """Main CLI entry point"""
+    """Main entry point"""
     try:
         app()
+    except KeyboardInterrupt:
+        safe_print("\n[bold red]Operation cancelled by user[/bold red]")
+        raise typer.Exit(1)
     except Exception as e:
-        # Fallback to basic functionality
-        print("VoxBridge CLI")
-        print("Note: Install 'rich' and 'typer' for enhanced interface")
-        print("Usage: voxbridge convert --input input.glb --target unity")
-        print("       voxbridge doctor")
-        print(f"Error: {e}")
+        safe_print(f"[bold red]Unexpected error:[/bold red] {str(e)}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
