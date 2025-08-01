@@ -257,7 +257,6 @@ def main():
                 export_texcoords=True,
                 export_normals=True,
                 export_materials='EXPORT',
-                export_colors=True,
                 use_selection=False,
                 export_extras=False,
                 export_yup=True  # Unity uses Y-up
@@ -270,7 +269,6 @@ def main():
                 export_texcoords=True,
                 export_normals=True,
                 export_materials='EXPORT',
-                export_colors=True,
                 use_selection=False,
                 export_extras=False,
                 export_yup=True  # Unity uses Y-up

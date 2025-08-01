@@ -60,14 +60,14 @@ def safe_print(message: str, style: str = ""):
 def print_header():
     """Print VoxBridge header"""
     if RICH_AVAILABLE:
-        title = Text("VoxBridge v1.0.1", style="bold cyan")
+        title = Text("VoxBridge v1.0.2", style="bold cyan")
         subtitle = Text("VoxEdit to Unity/Roblox Converter", style="dim white")
         version = Text("Professional Asset Converter", style="italic green")
         if console:
             console.print(Panel.fit(f"{title}\n{subtitle}\n{version}", 
                                    border_style="cyan", padding=(0, 1)))
     else:
-        print("VoxBridge v1.0.1 - VoxEdit to Unity/Roblox Converter")
+        print("VoxBridge v1.0.2 - VoxEdit to Unity/Roblox Converter")
         print("Professional Asset Converter")
         print("=" * 55)
 
