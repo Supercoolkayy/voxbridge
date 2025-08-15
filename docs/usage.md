@@ -8,7 +8,7 @@ VoxBridge can be used from the command line to clean, optimize, and prepare glTF
 voxbridge-cli input.glb output.glb
 voxbridge-cli input.gltf output.gltf
 ```
-
+ 
 ## Optimization Flags
 
 - `--optimize-mesh` : Enable polygon reduction and mesh splitting in Blender (GLB only)

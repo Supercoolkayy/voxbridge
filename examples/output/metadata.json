@@ -1,0 +1,14 @@
+{
+  "original_source_format": "GLB",
+  "target_platform": "roblox",
+  "export_date": "2025-08-15 18:59:46",
+  "tool_version": "1.0.3",
+  "platform_specific_notes": "Optimized for Roblox with texture size limits, simplified materials, and Roblox-compatible naming",
+  "files_included": [
+    "4_cubes_roblox.glb",
+    "4_cubes.bin",
+    "scene.bin",
+    "man_sitting.bin",
+    "license.txt"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "voxbridge-validator",
+  "version": "1.0.0",
+  "description": "JavaScript validation tools for VoxBridge GLTF exports",
+  "main": "validate_gltf.js",
+  "scripts": {
+    "validate": "node validate_gltf.js",
+    "test": "node validate_gltf.js test.gltf"
+  },
+  "dependencies": {
+    "archiver": "^6.0.2"
+  },
+  "keywords": [
+    "gltf",
+    "glb",
+    "validation",
+    "sketchfab",
+    "unity",
+    "roblox"
+  ],
+  "author": "VoxBridge Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

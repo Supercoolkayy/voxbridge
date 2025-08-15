@@ -78,13 +78,19 @@ class TestVoxBridgeConverter(unittest.TestCase):
         """Create a dummy GLB file"""
         glb_path = self.test_dir / "test.glb"
         # GLB files start with "glTF" magic bytes
+        json_content = b'{"asset":{"version":"2.0"}}'
+        json_length = len(json_content)
+        total_length = 12 + 8 + json_length + 8  # Header + JSON chunk + Binary chunk
+        
         with open(glb_path, 'wb') as f:
             f.write(b'glTF')  # Magic
             f.write(b'\x02\x00\x00\x00')  # Version 2
-            f.write(b'\x20\x00\x00\x00')  # Total length (32 bytes)
-            f.write(b'\x10\x00\x00\x00')  # JSON chunk length (16 bytes)
+            f.write(total_length.to_bytes(4, 'little'))  # Total length
+            f.write(json_length.to_bytes(4, 'little'))  # JSON chunk length
             f.write(b'JSON')  # JSON chunk type
-            f.write(b'{"asset":{"version":"2.0"}}')  # Minimal JSON
+            f.write(json_content)  # JSON content
+            f.write(b'\x00\x00\x00\x00')  # Binary chunk length (0)
+            f.write(b'BIN ')  # Binary chunk type
         return glb_path
     
     def test_validate_input_valid_gltf(self):

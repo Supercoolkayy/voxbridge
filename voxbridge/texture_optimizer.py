@@ -64,51 +64,77 @@ def update_gltf_with_atlas(gltf_path, mapping, atlas_filename):
     for mesh in gltf.meshes:
         for primitive in mesh.primitives:
             if hasattr(primitive, 'attributes') and primitive.attributes:
-                # Find UV attribute (TEXCOORD_0)
+                # Find UV attribute (TEXCOORD_0) - handle pygltflib attributes object properly
                 texcoord_attr = None
-                for attr_name, attr_index in primitive.attributes.items():
-                    if attr_name.startswith('TEXCOORD'):
-                        texcoord_attr = attr_name
-                        break
+                # Check if attributes is a dict-like object or pygltflib object
+                if hasattr(primitive.attributes, 'items'):
+                    # It's a dict-like object
+                    for attr_name, attr_index in primitive.attributes.items():
+                        if attr_name.startswith('TEXCOORD'):
+                            texcoord_attr = attr_name
+                            break
+                else:
+                    # It's a pygltflib object, use dir() to get attributes
+                    for attr_name in dir(primitive.attributes):
+                        if not attr_name.startswith('_') and hasattr(primitive.attributes, attr_name):
+                            attr_value = getattr(primitive.attributes, attr_name)
+                            if attr_value is not None and attr_name.startswith('TEXCOORD'):
+                                texcoord_attr = attr_name
+                                break
                 
-                if texcoord_attr and texcoord_attr in primitive.attributes:
-                    uv_accessor_index = primitive.attributes[texcoord_attr]
-                    uv_accessor = gltf.accessors[uv_accessor_index]
-                    
-                    # Get the buffer view and buffer data
-                    buffer_view = gltf.bufferViews[uv_accessor.bufferView]
-                    buffer_data = gltf.buffers[buffer_view.buffer]
-                    
-                    # Read current UV data
-                    uv_data = np.frombuffer(
-                        buffer_data.data[buffer_view.byteOffset:buffer_view.byteOffset + buffer_view.byteLength],
-                        dtype=np.float32
-                    ).reshape(-1, 2)
-                    
-                    # Find which material/texture this primitive uses
-                    material_index = primitive.material if hasattr(primitive, 'material') else None
-                    if material_index is not None:
-                        material = gltf.materials[material_index]
-                        # Find the base color texture
-                        if hasattr(material, 'pbrMetallicRoughness') and material.pbrMetallicRoughness:
-                            pbr = material.pbrMetallicRoughness
-                            if hasattr(pbr, 'baseColorTexture') and pbr.baseColorTexture:
-                                texture_index = pbr.baseColorTexture.index
-                                texture = gltf.textures[texture_index]
-                                image_index = texture.source
-                                image = gltf.images[image_index]
+                if texcoord_attr and hasattr(primitive.attributes, texcoord_attr):
+                    uv_accessor_index = getattr(primitive.attributes, texcoord_attr)
+                    if uv_accessor_index is not None and uv_accessor_index < len(gltf.accessors):
+                        uv_accessor = gltf.accessors[uv_accessor_index]
+                        
+                        # Get the buffer view and buffer data
+                        if (uv_accessor.bufferView is not None and 
+                            uv_accessor.bufferView < len(gltf.bufferViews)):
+                            buffer_view = gltf.bufferViews[uv_accessor.bufferView]
+                            
+                            if (buffer_view.buffer is not None and 
+                                buffer_view.buffer < len(gltf.buffers)):
+                                buffer_data = gltf.buffers[buffer_view.buffer]
                                 
-                                # Get original filename and find atlas mapping
-                                if hasattr(image, 'uri') and image.uri:
-                                    original_filename = Path(image.uri).name
-                                    if original_filename in uri_to_atlas_mapping:
-                                        atlas_uv = uri_to_atlas_mapping[original_filename]
-                                        # Remap UVs to atlas coordinates
-                                        uv_data[:, 0] = uv_data[:, 0] * (atlas_uv[2] - atlas_uv[0]) + atlas_uv[0]
-                                        uv_data[:, 1] = uv_data[:, 1] * (atlas_uv[3] - atlas_uv[1]) + atlas_uv[1]
-                    
-                    # Write updated UV data back to buffer
-                    updated_uv_bytes = uv_data.tobytes()
-                    buffer_data.data[buffer_view.byteOffset:buffer_view.byteOffset + buffer_view.byteLength] = updated_uv_bytes
+                                # Check if we have the data to work with
+                                if hasattr(buffer_data, 'data') and buffer_data.data:
+                                    try:
+                                        # Read current UV data
+                                        uv_data = np.frombuffer(
+                                            buffer_data.data[buffer_view.byteOffset:buffer_view.byteOffset + buffer_view.byteLength],
+                                            dtype=np.float32
+                                        ).reshape(-1, 2)
+                                        
+                                        # Find which material/texture this primitive uses
+                                        material_index = getattr(primitive, 'material', None)
+                                        if material_index is not None and material_index < len(gltf.materials):
+                                            material = gltf.materials[material_index]
+                                            # Find the base color texture
+                                            if hasattr(material, 'pbrMetallicRoughness') and material.pbrMetallicRoughness:
+                                                pbr = material.pbrMetallicRoughness
+                                                if hasattr(pbr, 'baseColorTexture') and pbr.baseColorTexture:
+                                                    texture_index = pbr.baseColorTexture.index
+                                                    if texture_index < len(gltf.textures):
+                                                        texture = gltf.textures[texture_index]
+                                                        image_index = texture.source
+                                                        if image_index < len(gltf.images):
+                                                            image = gltf.images[image_index]
+                                                            
+                                                            # Get original filename and find atlas mapping
+                                                            if hasattr(image, 'uri') and image.uri:
+                                                                original_filename = Path(image.uri).name
+                                                                if original_filename in uri_to_atlas_mapping:
+                                                                    atlas_uv = uri_to_atlas_mapping[original_filename]
+                                                                    # Remap UVs to atlas coordinates
+                                                                    uv_data[:, 0] = uv_data[:, 0] * (atlas_uv[2] - atlas_uv[0]) + atlas_uv[0]
+                                                                    uv_data[:, 1] = uv_data[:, 1] * (atlas_uv[3] - atlas_uv[1]) + atlas_uv[1]
+                                                        
+                                                        # Write updated UV data back to buffer
+                                                        updated_uv_bytes = uv_data.tobytes()
+                                                        buffer_data.data[buffer_view.byteOffset:buffer_view.byteOffset + buffer_view.byteLength] = updated_uv_bytes
+                                    except Exception as e:
+                                        # Log the error but continue processing other primitives
+                                        print(f"Warning: Could not process UVs for primitive: {e}")
+                                        continue
     
     gltf.save(gltf_path) 

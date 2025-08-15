@@ -52,7 +52,10 @@ console = Console() if RICH_AVAILABLE else None
 def safe_print(message: str, style: str = ""):
     """Safely print with Rich or fallback to regular print"""
     if RICH_AVAILABLE and console:
-        console.print(message, style=style)
+        try:
+            console.print(message, style=style)
+        except Exception:
+            print(message)
     else:
         print(message)
 
@@ -60,12 +63,17 @@ def safe_print(message: str, style: str = ""):
 def print_header():
     """Print VoxBridge header"""
     if RICH_AVAILABLE:
-        title = Text("VoxBridge v1.0.3", style="bold cyan")
-        subtitle = Text("VoxEdit to Unity/Roblox Converter", style="dim white")
-        version = Text("Professional Asset Converter", style="italic green")
-        if console:
-            console.print(Panel.fit(f"{title}\n{subtitle}\n{version}", 
-                                   border_style="cyan", padding=(0, 1)))
+        try:
+            title = Text("VoxBridge v1.0.3", style="bold cyan")
+            subtitle = Text("VoxEdit to Unity/Roblox Converter", style="dim white")
+            version = Text("Professional Asset Converter", style="italic green")
+            if console:
+                console.print(Panel.fit(f"{title}\n{subtitle}\n{version}", 
+                                       border_style="cyan", padding=(0, 1)))
+        except Exception:
+            print("VoxBridge v1.0.3 - VoxEdit to Unity/Roblox Converter")
+            print("Professional Asset Converter")
+            print("=" * 55)
     else:
         print("VoxBridge v1.0.3 - VoxEdit to Unity/Roblox Converter")
         print("Professional Asset Converter")
@@ -75,17 +83,23 @@ def print_header():
 def print_conversion_start(input_path: Path, output_path: Path):
     """Print conversion start information"""
     if RICH_AVAILABLE:
-        if console:
-            console.print("[bold yellow]File Configuration[/bold yellow]")
-            
-            table = Table(show_header=False, box=None, show_edge=False)
-            table.add_column("Type", style="bold cyan", no_wrap=True, width=10)
-            table.add_column("Path", style="white")
-            
-            table.add_row("Input", str(input_path))
-            table.add_row("Output", str(output_path))
-            console.print(table)
-            console.print()
+        try:
+            if console:
+                console.print("[bold yellow]File Configuration[/bold yellow]")
+                
+                table = Table(show_header=False, box=None, show_edge=False)
+                table.add_column("Type", style="bold cyan", no_wrap=True, width=10)
+                table.add_column("Path", style="white")
+                
+                table.add_row("Input", str(input_path))
+                table.add_row("Output", str(output_path))
+                console.print(table)
+                console.print()
+        except Exception:
+            print("[INPUT]  File Configuration")
+            print(f"[INPUT]  {input_path}")
+            print(f"[OUTPUT] {output_path}")
+            print()
     else:
         print("[INPUT]  File Configuration")
         print(f"[INPUT]  {input_path}")
@@ -96,54 +110,40 @@ def print_conversion_start(input_path: Path, output_path: Path):
 def print_validation_results(stats: dict):
     """Print validation results"""
     if RICH_AVAILABLE:
-        safe_print("[bold magenta]Validation Results[/bold magenta]")
-        
-        # Create a table for validation results
-        table = Table(show_header=False, box=None, show_edge=False)
-        table.add_column("Metric", style="bold cyan", no_wrap=True, width=15)
-        table.add_column("Value", style="white")
-        
-        if stats.get('file_exists'):
-            table.add_row("File Created", f"[OK] {stats.get('file_size', 0):,} bytes")
-        else:
-            table.add_row("File Created", "[FAILED]")
+        try:
+            safe_print("[bold magenta]Validation Results[/bold magenta]")
             
-        if 'materials' in stats:
-            table.add_row("Materials", f"[MATERIALS] {stats['materials']}")
-        if 'textures' in stats:
-            table.add_row("Textures", f"[TEXTURES] {stats['textures']}")
-        if 'meshes' in stats:
-            table.add_row("Meshes", f"[MESHES] {stats['meshes']}")
-        if 'nodes' in stats:
-            table.add_row("Nodes", f"[NODES] {stats['nodes']}")
-        if 'note' in stats:
-            table.add_row("Note", f"[INFO] {stats['note']}")
-        if 'error' in stats:
-            table.add_row("Error", f"[ERROR] {stats['error']}")
-            
-        if console:
-            console.print(table)
-            console.print()
+            if stats.get('file_exists'):
+                safe_print("[bold green]✅ File created successfully![/bold green]")
+                safe_print(f"[dim]File size:[/dim] {stats.get('file_size', 0):,} bytes")
+                
+                if stats.get('materials') is not None:
+                    safe_print(f"[dim]Materials:[/dim] {stats.get('materials', 0)}")
+                if stats.get('textures') is not None:
+                    safe_print(f"[dim]Textures:[/dim] {stats.get('textures', 0)}")
+                if stats.get('meshes') is not None:
+                    safe_print(f"[dim]Meshes:[/dim] {stats.get('meshes', 0)}")
+                if stats.get('nodes') is not None:
+                    safe_print(f"[dim]Nodes:[/dim] {stats.get('nodes', 0)}")
+                
+                if stats.get('note'):
+                    safe_print(f"[dim]Note:[/dim] {stats.get('note')}")
+            else:
+                safe_print("[bold red]❌ File creation failed![/bold red]")
+        except Exception:
+            # Fallback to regular print
+            if stats.get('file_exists'):
+                print("✅ File created successfully!")
+                print(f"File size: {stats.get('file_size', 0):,} bytes")
+            else:
+                print("❌ File creation failed!")
     else:
-        print("[STATS] Validation Results:")
+        # Regular print fallback
         if stats.get('file_exists'):
-            print(f"  [OK] File created: {stats.get('file_size', 0):,} bytes")
+            print("✅ File created successfully!")
+            print(f"File size: {stats.get('file_size', 0):,} bytes")
         else:
-            print(f"  [ERROR] File creation failed")
-            
-        if 'materials' in stats:
-            print(f"  [INFO] Materials: {stats['materials']}")
-        if 'textures' in stats:
-            print(f"  [INFO] Textures: {stats['textures']}")
-        if 'meshes' in stats:
-            print(f"  [INFO] Meshes: {stats['meshes']}")
-        if 'nodes' in stats:
-            print(f"  [INFO] Nodes: {stats['nodes']}")
-        if 'note' in stats:
-            print(f"  [INFO] {stats['note']}")
-        if 'error' in stats:
-            print(f"  [ERROR] {stats['error']}")
-        print()
+            print("❌ File creation failed!")
 
 
 def handle_conversion(
@@ -176,14 +176,15 @@ def handle_conversion(
     try:
         # Show progress with Rich if available
         if RICH_AVAILABLE and not verbose:
-            with Progress(
-                SpinnerColumn(spinner_name="dots"),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(bar_width=40),
-                TimeElapsedColumn(),
-                console=console
-            ) as progress:
-                task = progress.add_task("[bold cyan]Initializing...", total=None)
+            try:
+                with Progress(
+                    SpinnerColumn(spinner_name="dots"),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(bar_width=40),
+                    TimeElapsedColumn(),
+                    console=console
+                ) as progress:
+                    task = progress.add_task("[bold cyan]Initializing...", total=None)
                 
                 # Determine processing method
                 if use_blender and input_path.suffix.lower() == '.glb':
@@ -212,10 +213,10 @@ def handle_conversion(
                 progress.update(task, description="[bold magenta]Converting file...")
                 success = converter.convert_file(
                     input_path, output_path, use_blender,
-                    optimize_mesh=optimize_mesh,
-                    generate_atlas=generate_atlas,
-                    compress_textures=compress_textures,
-                    platform=platform
+                    optimize_mesh,
+                    generate_atlas,
+                    compress_textures,
+                    platform
                 )
                 
                 if success:
@@ -225,6 +226,23 @@ def handle_conversion(
                 else:
                     progress.update(task, description="[bold red]Conversion failed")
                     progress.stop()
+                    safe_print("[bold red]Conversion failed![/bold red]")
+                    return False
+            except Exception as e:
+                # Fallback if Rich progress fails
+                print(f"Progress display failed: {e}")
+                # Continue with conversion
+                success = converter.convert_file(
+                    input_path, output_path, use_blender,
+                    optimize_mesh,
+                    generate_atlas,
+                    compress_textures,
+                    platform
+                )
+                
+                if success:
+                    safe_print("[bold green]Conversion completed successfully![/bold green]")
+                else:
                     safe_print("[bold red]Conversion failed![/bold red]")
                     return False
         else:
@@ -253,10 +271,10 @@ def handle_conversion(
             print("[PROCESS] Converting file...")
             success = converter.convert_file(
                 input_path, output_path, use_blender,
-                optimize_mesh=optimize_mesh,
-                generate_atlas=generate_atlas,
-                compress_textures=compress_textures,
-                platform=platform
+                optimize_mesh,
+                generate_atlas,
+                compress_textures,
+                platform
             )
             
             if success:
@@ -399,7 +417,18 @@ def convert(
     # Auto-generate output path if not specified
     if output is None:
         input_stem = input_file.stem
-        output = input_file.parent / f"{input_stem}_{target}_clean{input_file.suffix}"
+        # Preserve the original file extension for better compatibility
+        if input_file.suffix.lower() == '.glb':
+            output = input_file.parent / f"{input_stem}_{target}_clean.glb"
+        else:
+            output = input_file.parent / f"{input_stem}_{target}_clean.gltf"
+    else:
+        # Ensure output has proper extension
+        if not output.suffix:
+            if input_file.suffix.lower() == '.glb':
+                output = output.with_suffix('.glb')
+            else:
+                output = output.with_suffix('.gltf')
     
     # Check if output file exists and handle force flag
     if output.exists() and not force:
@@ -432,6 +461,75 @@ def convert(
 
 
 @app.command()
+def sketchfab(
+    input_file: Path = typer.Option(..., "--input", "-i", help="Input GLB/GLTF file to create Sketchfab-ready package"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for Sketchfab package"),
+    create_zip: bool = typer.Option(True, "--create-zip", help="Create ZIP file with GLTF and binary files for Sketchfab"),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing output file without confirmation"),
+):
+    """Create Sketchfab-ready package that fixes Error 33 issues"""
+    
+    print_header()
+    
+    # Set output directory
+    if output is None:
+        output = Path(f"sketchfab_ready_{input_file.stem}")
+    
+    # Ensure output directory exists
+    output.mkdir(parents=True, exist_ok=True)
+    
+    print(f"🎯 Creating Sketchfab-ready package for: {input_file}")
+    print(f"📁 Output Directory: {output}")
+    print()
+    
+    try:
+        # Import converter
+        from .converter import VoxBridgeConverter
+        
+        converter = VoxBridgeConverter()
+        
+        # First convert to GLTF if needed
+        if input_file.suffix.lower() == '.glb':
+            print("📦 Converting GLB to GLTF...")
+            gltf_output = output / f"{input_file.stem}.gltf"
+            
+            if not converter.convert_file(input_file, gltf_output, use_blender=False, platform="unity"):
+                raise RuntimeError("Failed to convert GLB to GLTF")
+            
+            print(f"✅ GLTF created: {gltf_output}")
+        else:
+            gltf_output = input_file
+        
+        # Create Sketchfab-ready package
+        print("\n🎯 Creating Sketchfab-ready package...")
+        if converter.create_sketchfab_ready_package(gltf_output):
+            print("\n🎉 SUCCESS: Sketchfab-ready package created!")
+            print("📁 This package should upload without Error 33!")
+            
+            # Show package contents
+            sketchfab_dir = output / "sketchfab_ready"
+            if sketchfab_dir.exists():
+                print("\n📁 Package contents (flat structure, no folders):")
+                for file_path in sketchfab_dir.iterdir():
+                    if file_path.is_file():
+                        print(f"  - {file_path.name}")
+                
+                # Show ZIP file
+                zip_files = list(output.glob("*_sketchfab.zip"))
+                if zip_files:
+                    print(f"\n📦 Upload this ZIP file to Sketchfab: {zip_files[0].name}")
+                    print("💡 This ZIP has the correct flat structure to avoid Error 33")
+            
+        else:
+            print("\n❌ FAILED: Could not create Sketchfab-ready package")
+            raise RuntimeError("Package creation failed")
+        
+    except Exception as e:
+        print(f"❌ Sketchfab package creation failed: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def help():
     """Show detailed help information"""
     print_header()
@@ -439,14 +537,18 @@ def help():
     safe_print("=" * 40)
     
     safe_print("[bold cyan]Commands:[/bold cyan]")
-    safe_print("  convert  - Convert single file")
-    safe_print("  batch    - Process multiple files")
-    safe_print("  doctor   - System diagnostics")
-    safe_print("  help     - Show this help")
+    safe_print("  convert   - Convert single file")
+    safe_print("  sketchfab - Create Sketchfab-compatible files")
+    safe_print("  batch     - Process multiple files")
+    safe_print("  doctor    - System diagnostics")
+    safe_print("  help      - Show this help")
     
     safe_print("\n[bold cyan]Examples:[/bold cyan]")
     safe_print("  # Basic Unity conversion")
     safe_print("  voxbridge convert --input model.glb --target unity")
+    
+    safe_print("  # Sketchfab-ready conversion")
+    safe_print("  voxbridge sketchfab --input model.glb")
     
     safe_print("  # Optimized Roblox conversion")
     safe_print("  voxbridge convert --input model.glb --target roblox --optimize-mesh --generate-atlas")
