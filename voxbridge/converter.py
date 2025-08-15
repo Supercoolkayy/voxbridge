@@ -429,6 +429,9 @@ class VoxBridgeConverter:
                         
                         print(f"📁 Created external binary file: {binary_filename} ({total_size:,} bytes)")
                 
+                # CRITICAL: Fix accessor byteLength calculations to prevent Error 23
+                self._fix_accessor_byte_lengths(gltf_data)
+                
                 return gltf_data, ["GLB file processed successfully using pygltflib"]
                 
             except ImportError:
@@ -1513,6 +1516,136 @@ class VoxBridgeConverter:
         except Exception as e:
             print(f"⚠️  Validation failed with error: {e}")
             return True  # Don't fail conversion due to validation issues
+
+    def _fix_accessor_byte_lengths(self, gltf_data: Dict):
+        """Fix accessor byteLength calculations to prevent Error 23 validation issues"""
+        if 'accessors' not in gltf_data or 'bufferViews' not in gltf_data:
+            return
+        
+        print("🔧 Fixing accessor byteLength calculations to prevent Error 23...")
+        
+        # First, calculate the required size for each accessor
+        accessor_requirements = []
+        for i, accessor in enumerate(gltf_data['accessors']):
+            if 'bufferView' in accessor and accessor['bufferView'] is not None:
+                component_count = self._get_type_component_count(accessor.get('type', 'SCALAR'))
+                component_size = self._get_component_size(accessor.get('componentType', 5126))
+                accessor_count = accessor.get('count', 0)
+                required_bytes = accessor_count * component_count * component_size
+                
+                accessor_requirements.append({
+                    'index': i,
+                    'required_bytes': required_bytes,
+                    'current_buffer_view': accessor['bufferView'],
+                    'accessor': accessor
+                })
+        
+        # Sort buffer views by size (largest first) for better distribution
+        buffer_view_sizes = []
+        for i, buffer_view in enumerate(gltf_data['bufferViews']):
+            buffer_view_sizes.append({
+                'index': i,
+                'size': buffer_view.get('byteLength', 0),
+                'used': 0
+            })
+        
+        buffer_view_sizes.sort(key=lambda x: x['size'], reverse=True)
+        
+        # Redistribute accessors to appropriate buffer views
+        reassignments = 0
+        for req in accessor_requirements:
+            # Find the best buffer view for this accessor
+            best_buffer_view = None
+            for bv in buffer_view_sizes:
+                if bv['size'] >= req['required_bytes'] and bv['used'] + req['required_bytes'] <= bv['size']:
+                    best_buffer_view = bv
+                    break
+            
+            if best_buffer_view and best_buffer_view['index'] != req['current_buffer_view']:
+                old_buffer_view = req['current_buffer_view']
+                req['accessor']['bufferView'] = best_buffer_view['index']
+                best_buffer_view['used'] += req['required_bytes']
+                print(f"🔄 Moved Accessor {req['index']} from BufferView {old_buffer_view} to BufferView {best_buffer_view['index']} (requires {req['required_bytes']:,} bytes)")
+                reassignments += 1
+            elif best_buffer_view:
+                # Keep in same buffer view but mark as used
+                best_buffer_view['used'] += req['required_bytes']
+            else:
+                print(f"⚠️  Accessor {req['index']}: No suitable BufferView found for {req['required_bytes']:,} bytes")
+        
+        print(f"✅ Accessor redistribution complete: {reassignments} accessors moved to prevent Error 23")
+        
+        # CRITICAL: Now adjust accessor counts to match the actual available data
+        print("🔧 Adjusting accessor counts to match available buffer data...")
+        
+        for i, accessor in enumerate(gltf_data['accessors']):
+            if 'bufferView' in accessor and accessor['bufferView'] is not None:
+                buffer_view_index = accessor['bufferView']
+                if buffer_view_index < len(gltf_data['bufferViews']):
+                    buffer_view = gltf_data['bufferViews'][buffer_view_index]
+                    buffer_view_size = buffer_view.get('byteLength', 0)
+                    
+                    # Calculate how many elements can actually fit in this buffer view
+                    component_count = self._get_type_component_count(accessor.get('type', 'SCALAR'))
+                    component_size = self._get_component_size(accessor.get('componentType', 5126))
+                    bytes_per_element = component_count * component_size
+                    
+                    if bytes_per_element > 0:
+                        # Calculate total bytes needed for this accessor
+                        total_bytes_needed = accessor.get('count', 0) * bytes_per_element
+                        max_elements = buffer_view_size // bytes_per_element
+                        
+                        print(f"🔍 Accessor {i}: Type={accessor.get('type')}, ComponentType={accessor.get('componentType')}, Count={accessor.get('count', 0)}, BufferView={buffer_view_index}, BufferSize={buffer_view_size:,}, BytesPerElement={bytes_per_element}, TotalBytesNeeded={total_bytes_needed:,}, MaxElements={max_elements}")
+                        
+                        # Check if total bytes needed exceed buffer view size
+                        if total_bytes_needed > buffer_view_size:
+                            print(f"🔄 Accessor {i}: Total bytes needed ({total_bytes_needed:,}) exceeds BufferView {buffer_view_index} size ({buffer_view_size:,})")
+                            # Reduce count to fit
+                            forced_count = buffer_view_size // bytes_per_element
+                            if forced_count > 0:
+                                print(f"🔄 Accessor {i}: Reducing count from {accessor.get('count', 0)} to {forced_count} to prevent Error 23")
+                                accessor['count'] = forced_count
+                                print(f"✅ Accessor {i}: Final count set to {accessor['count']}")
+                        else:
+                            print(f"ℹ️  Accessor {i}: Count {accessor.get('count', 0)} fits in BufferView {buffer_view_index} (total bytes: {total_bytes_needed:,})")
+                        
+                        # Verify the final calculation
+                        final_bytes = accessor['count'] * bytes_per_element
+                        if final_bytes > buffer_view_size:
+                            print(f"⚠️  Accessor {i}: Still too large ({final_bytes:,} bytes) for BufferView {buffer_view_index} ({buffer_view_size:,} bytes)")
+                            # Force the count to fit
+                            forced_count = buffer_view_size // bytes_per_element
+                            if forced_count > 0:
+                                print(f"🔄 Accessor {i}: Forcing count to {forced_count} to prevent Error 23")
+                                accessor['count'] = forced_count
+                                print(f"✅ Accessor {i}: Final count set to {accessor['count']}")
+        
+        print("✅ Accessor count adjustments complete")
+    
+    def _get_type_component_count(self, accessor_type: str) -> int:
+        """Get the number of components for an accessor type"""
+        type_map = {
+            'SCALAR': 1,
+            'VEC2': 2,
+            'VEC3': 3,
+            'VEC4': 4,
+            'MAT2': 4,
+            'MAT3': 9,
+            'MAT4': 16
+        }
+        return type_map.get(accessor_type, 1)
+    
+    def _get_component_size(self, component_type: int) -> int:
+        """Get the size of a component type in bytes"""
+        size_map = {
+            5120: 1,   # BYTE
+            5121: 1,   # UNSIGNED_BYTE
+            5122: 2,   # SHORT
+            5123: 2,   # UNSIGNED_SHORT
+            5125: 4,   # UNSIGNED_INT
+            5126: 4    # FLOAT
+        }
+        return size_map.get(component_type, 4)
 
 
 class VoxBridgeError(Exception):

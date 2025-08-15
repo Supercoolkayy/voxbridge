@@ -633,8 +633,9 @@ class GLTFValidator {
 
       // Check if accessor count is consistent with bufferView byteLength
       if (accessor.count !== undefined && bufferView.byteLength !== undefined) {
-        const expectedByteLength = this.calculateAccessorByteLength(accessor);
-        if (accessor.count * expectedByteLength > bufferView.byteLength) {
+        const bytesPerElement = this.calculateAccessorByteLength(accessor);
+        const totalBytesNeeded = accessor.count * bytesPerElement;
+        if (totalBytesNeeded > bufferView.byteLength) {
           this.errors.push(
             `Accessor ${index}: Accessor count ${accessor.count} exceeds BufferView byteLength ${bufferView.byteLength}`
           );
@@ -670,7 +671,7 @@ class GLTFValidator {
   calculateAccessorByteLength(accessor) {
     const componentCount = this.getTypeComponentCount(accessor.type);
     const componentSize = this.getComponentSize(accessor.componentType);
-    return accessor.count * componentCount * componentSize;
+    return componentCount * componentSize; // Return bytes per element, not total bytes
   }
 
   /**
