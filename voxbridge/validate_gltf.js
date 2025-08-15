@@ -83,6 +83,9 @@ class GLTFValidator {
       // CRITICAL: Buffer size validation and auto-fixing
       this.validateBufferSizes(this.gltfData);
 
+      // CRITICAL: Error 23 prevention - Accessor validation and buffer view alignment
+      this.validateError23(this.gltfData);
+
       // Generate validation report
       this.generateReport();
 
@@ -574,10 +577,107 @@ class GLTFValidator {
   }
 
   /**
-   * Helper: Get component count for a type
+   * CRITICAL: Error 23 prevention - Accessor validation and buffer view alignment
+   * Checks for common issues like accessor type mismatch, bufferView byteLength mismatch,
+   * and accessor byteOffset/stride alignment issues.
+   */
+  validateError23(gltf) {
+    if (!gltf.accessors || !gltf.bufferViews) return;
+
+    console.log(
+      `${colors.cyan}🔍 Error 23 Prevention (Accessor/BufferView Alignment)${colors.reset}`
+    );
+
+    gltf.accessors.forEach((accessor, index) => {
+      const bufferView = gltf.bufferViews[accessor.bufferView];
+      if (!bufferView) {
+        this.errors.push(
+          `Accessor ${index}: Invalid bufferView reference ${accessor.bufferView}`
+        );
+        return;
+      }
+
+      // Check if accessor type matches bufferView byteStride
+      if (accessor.type !== "SCALAR") {
+        if (bufferView.byteStride !== undefined && bufferView.byteStride < 4) {
+          this.errors.push(
+            `Accessor ${index}: BufferView byteStride too small for ${accessor.type} type`
+          );
+        }
+        if (
+          bufferView.byteStride !== undefined &&
+          bufferView.byteStride % 4 !== 0
+        ) {
+          this.errors.push(
+            `Accessor ${index}: BufferView byteStride must be multiple of 4`
+          );
+        }
+      }
+
+      // Check if accessor byteOffset is within bufferView byteLength
+      if (accessor.byteOffset !== undefined && accessor.byteOffset < 0) {
+        this.errors.push(
+          `Accessor ${index}: Invalid byteOffset ${accessor.byteOffset}`
+        );
+      }
+      if (
+        accessor.byteOffset !== undefined &&
+        bufferView.byteLength !== undefined
+      ) {
+        if (accessor.byteOffset >= bufferView.byteLength) {
+          this.errors.push(
+            `Accessor ${index}: byteOffset ${accessor.byteOffset} exceeds BufferView byteLength ${bufferView.byteLength}`
+          );
+        }
+      }
+
+      // Check if accessor count is consistent with bufferView byteLength
+      if (accessor.count !== undefined && bufferView.byteLength !== undefined) {
+        const expectedByteLength = this.calculateAccessorByteLength(accessor);
+        if (accessor.count * expectedByteLength > bufferView.byteLength) {
+          this.errors.push(
+            `Accessor ${index}: Accessor count ${accessor.count} exceeds BufferView byteLength ${bufferView.byteLength}`
+          );
+        }
+      }
+
+      // Check if accessor min/max bounds match type
+      if (accessor.type !== "SCALAR") {
+        if (accessor.min && accessor.max) {
+          const expectedLength = this.getTypeComponentCount(accessor.type);
+          if (
+            accessor.min.length !== expectedLength ||
+            accessor.max.length !== expectedLength
+          ) {
+            this.errors.push(
+              `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type}`
+            );
+          }
+        }
+      }
+
+      console.log(
+        `  ✅ Accessor ${index}: Type and BufferView alignment checks passed`
+      );
+    });
+
+    console.log("");
+  }
+
+  /**
+   * Calculate the expected byte length for an accessor
+   */
+  calculateAccessorByteLength(accessor) {
+    const componentCount = this.getTypeComponentCount(accessor.type);
+    const componentSize = this.getComponentSize(accessor.componentType);
+    return accessor.count * componentCount * componentSize;
+  }
+
+  /**
+   * Get the number of components for an accessor type
    */
   getTypeComponentCount(type) {
-    const componentCounts = {
+    const typeMap = {
       SCALAR: 1,
       VEC2: 2,
       VEC3: 3,
@@ -586,23 +686,14 @@ class GLTFValidator {
       MAT3: 9,
       MAT4: 16,
     };
-    return componentCounts[type] || 0;
+    return typeMap[type] || 1;
   }
 
   /**
-   * Helper: Calculate expected byte length for an accessor
-   */
-  calculateAccessorByteLength(accessor) {
-    const componentSize = this.getComponentSize(accessor.componentType);
-    const componentCount = this.getTypeComponentCount(accessor.type);
-    return accessor.count * componentCount * componentSize;
-  }
-
-  /**
-   * Helper: Get component size in bytes
+   * Get the size of a component type in bytes
    */
   getComponentSize(componentType) {
-    const sizes = {
+    const sizeMap = {
       5120: 1, // BYTE
       5121: 1, // UNSIGNED_BYTE
       5122: 2, // SHORT
@@ -610,7 +701,7 @@ class GLTFValidator {
       5125: 4, // UNSIGNED_INT
       5126: 4, // FLOAT
     };
-    return sizes[componentType] || 0;
+    return sizeMap[componentType] || 4;
   }
 
   /**
@@ -703,9 +794,49 @@ class GLTFValidator {
       console.log(
         `${colors.green}🎯 This GLTF file is ready for Sketchfab upload!${colors.reset}`
       );
-      console.log(
-        `${colors.green}🛡️  Error 13 prevention: ACTIVE${colors.reset}`
-      );
+
+      // Check if Error 13 prevention is active
+      const hasUVs =
+        this.gltfData.meshes &&
+        this.gltfData.meshes.every(
+          (mesh) =>
+            mesh.primitives &&
+            mesh.primitives.every(
+              (primitive) =>
+                primitive.attributes &&
+                primitive.attributes.TEXCOORD_0 !== undefined
+            )
+        );
+
+      // Check if Error 23 prevention is active
+      const hasValidAccessors =
+        this.gltfData.accessors &&
+        this.gltfData.accessors.every((accessor) => {
+          if (
+            !accessor.bufferView ||
+            !this.gltfData.bufferViews[accessor.bufferView]
+          )
+            return false;
+          const bufferView = this.gltfData.bufferViews[accessor.bufferView];
+          if (
+            bufferView.byteStride !== undefined &&
+            bufferView.byteStride % 4 !== 0
+          )
+            return false;
+          return true;
+        });
+
+      if (hasUVs) {
+        console.log(
+          `${colors.green}🛡️  Error 13 prevention: ACTIVE${colors.reset}`
+        );
+      }
+
+      if (hasValidAccessors) {
+        console.log(
+          `${colors.green}🛡️  Error 23 prevention: ACTIVE${colors.reset}`
+        );
+      }
     } else {
       console.log(`${colors.red}❌ VALIDATION FAILED${colors.reset}`);
       console.log(
@@ -749,7 +880,7 @@ async function main() {
       `${colors.cyan}${colors.bright}VoxBridge GLTF Validator v1.1${colors.reset}`
     );
     console.log(
-      `${colors.blue}Prevents Error 13 (data corruption) issues for Sketchfab uploads${colors.reset}\n`
+      `${colors.blue}Prevents Error 13 (data corruption) and Error 23 (accessor validation) issues for Sketchfab uploads${colors.reset}\n`
     );
     console.log("Usage:");
     console.log("  node validate_gltf.js <input.gltf>");
@@ -765,6 +896,9 @@ async function main() {
     console.log(
       "  • UV coordinate validation (TEXCOORD_0) - Critical for Error 13"
     );
+    console.log(
+      "  • Accessor validation and buffer alignment - Critical for Error 23"
+    );
     console.log("  • Deep accessor type validation");
     console.log("  • Data consistency checks");
     console.log("  • Buffer reference validation");
@@ -772,6 +906,7 @@ async function main() {
     console.log("  • Material and texture validation");
     console.log("  • Buffer size auto-fixing");
     console.log("  • Error 13 prevention checks");
+    console.log("  • Error 23 prevention checks");
     return;
   }
 

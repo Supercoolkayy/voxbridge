@@ -408,10 +408,14 @@ class VoxBridgeConverter:
                                 if f'bufferView_{i}' in self._extracted_binary_data:
                                     f.write(self._extracted_binary_data[f'bufferView_{i}'])
                         
-                        # Update buffer views with new offsets
+                        # Update buffer views with new offsets and byteLength
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
                             if i in buffer_view_offsets:
                                 buffer_view['byteOffset'] = buffer_view_offsets[i]
+                                # CRITICAL: Update byteLength to match the actual extracted data
+                                if f'bufferView_{i}' in self._extracted_binary_data:
+                                    buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
+                                    print(f"📏 BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -508,13 +512,17 @@ class VoxBridgeConverter:
         if use_blender and input_path.suffix.lower() == '.glb':
             # Try Blender first for GLB files
             try:
-                print("Attempting Blender conversion...")
+                print("🎨 Attempting Blender conversion...")
                 if self.convert_with_blender(input_path, output_path, optimize_mesh=optimize_mesh, platform=platform):
-                    print("Blender conversion successful!")
+                    print("✅ Blender conversion successful!")
                     return True
+                else:
+                    print("⚠️  Blender conversion failed, falling back to basic GLB processing...")
+                    # Fall back to basic GLB processing
+                    return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
             except Exception as e:
-                print(f"Blender conversion failed: {e}")
-                print("Falling back to basic GLB processing...")
+                print(f"❌ Blender conversion failed with error: {e}")
+                print("🔄 Falling back to basic GLB processing...")
                 # Fall back to basic GLB processing
                 return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
         else:
@@ -525,10 +533,29 @@ class VoxBridgeConverter:
         """Convert using Blender Python script with platform-specific settings"""
         blender_exe = self.find_blender()
         if not blender_exe:
-            raise RuntimeError("Blender not found. Please install Blender or add it to your PATH")
+            print("⚠️  Blender not found, using basic conversion...")
+            return False
         
         if not self.blender_script_path.exists():
-            raise RuntimeError(f"Blender script not found: {self.blender_script_path}")
+            print("⚠️  Blender script not found, using basic conversion...")
+            return False
+        
+        # Try to install numpy in Blender's Python environment first
+        try:
+            print("🔧 Attempting to install numpy in Blender's Python environment...")
+            numpy_install_cmd = [
+                blender_exe,
+                "--background",
+                "--python-expr",
+                "import subprocess; import sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'numpy'])"
+            ]
+            result = subprocess.run(numpy_install_cmd, capture_output=True, text=True, timeout=60)
+            if result.returncode == 0:
+                print("✅ Numpy installed successfully in Blender's Python environment")
+            else:
+                print("⚠️  Could not install numpy in Blender's Python environment")
+        except Exception as e:
+            print(f"⚠️  Numpy installation attempt failed: {e}")
         
         # Run Blender in background mode with our script
         cmd = [
@@ -544,32 +571,34 @@ class VoxBridgeConverter:
             cmd.append("--optimize-mesh")
         
         try:
+            print("🎨 Running Blender conversion...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             
             if result.returncode == 0:
+                print("✅ Blender conversion successful!")
                 return True
             else:
                 # Check for specific error patterns
                 stderr = result.stderr or ""
-                if "No module named 'numpy'" in stderr:
-                    raise RuntimeError(
-                        "Blender numpy dependency missing. This is a common issue. "
-                        "Try installing numpy in Blender's Python environment or use --no-blender flag. "
-                        f"Error: {stderr[:200]}..."
-                    )
-                elif "ModuleNotFoundError" in stderr:
-                    raise RuntimeError(
-                        "Blender Python environment missing required modules. "
-                        "Try using --no-blender flag for basic conversion. "
-                        f"Error: {stderr[:200]}..."
-                    )
+                stdout = result.stdout or ""
+                
+                if "No module named 'numpy'" in stderr or "No module named 'numpy'" in stdout:
+                    print("⚠️  Blender numpy dependency missing. Using basic conversion...")
+                    return False
+                elif "ModuleNotFoundError" in stderr or "ModuleNotFoundError" in stdout:
+                    print("⚠️  Blender Python environment missing required modules. Using basic conversion...")
+                    return False
                 else:
-                    raise RuntimeError(f"Blender failed with return code {result.returncode}\n{stderr}")
+                    print(f"⚠️  Blender failed with return code {result.returncode}")
+                    print(f"Error output: {stderr[:200]}...")
+                    return False
                 
         except subprocess.TimeoutExpired:
-            raise RuntimeError("Blender processing timed out (120s)")
+            print("⚠️  Blender processing timed out (120s). Using basic conversion...")
+            return False
         except Exception as e:
-            raise RuntimeError(f"Failed to run Blender: {e}")
+            print(f"⚠️  Blender execution failed: {e}. Using basic conversion...")
+            return False
         
         return False  # Fallback return
     
@@ -1432,20 +1461,6 @@ class VoxBridgeConverter:
                 if old_file != output_path:  # Don't delete the target file
                     old_file.unlink()
                     print(f"🗑️  Cleaned up old file: {old_file.name}")
-            
-            # Remove old .bin files that might be from previous conversions
-            # BUT don't remove the one that will be created for this conversion
-            # AND don't remove binary files from other recent conversions
-            for old_bin in output_dir.glob("*.bin"):
-                # Keep the binary file for this conversion
-                if old_bin.name == f"{output_stem}.bin":
-                    continue
-                # Keep binary files that look like they're from recent conversions (have _roblox suffix)
-                if "_roblox.bin" in old_bin.name:
-                    continue
-                # Only remove truly old/unused binary files
-                old_bin.unlink()
-                print(f"🗑️  Cleaned up old binary file: {old_bin.name}")
             
             # Remove any .glb files since we no longer generate them
             for old_glb in output_dir.glob("*.glb"):
