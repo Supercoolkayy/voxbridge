@@ -1,24 +1,22 @@
 VoxBridge Output Package
 ==============================
 
-Input file: 4_cubes.glb
-Output file: 4_cubes_roblox.glb
+Input file: man_sitting.glb
+Output file: man_sitting_roblox.glb
 Target platform: roblox
-Generated: 2025-08-15 19:00:06
+Generated: 2025-08-15 19:18:02
 
 Files included:
-- 4_cubes_roblox.glb (main model file)
+- man_sitting_roblox.glb (main model file)
 - metadata.json
 - stylized_anime_female_head.zip
 - license.txt
-- 4_cubes_roblox_roblox_package.zip
 - 4_cubes.bin
 - man_sitting_roblox.gltf
 - man_sitting_roblox_roblox_package.zip
 - scene.bin
 - 4_cubes_roblox.gltf
 - man_sitting.bin
-- man_sitting_roblox.glb
 
 Usage:
 - Import into Roblox using MeshPart importer
