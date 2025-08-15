@@ -409,13 +409,15 @@ class VoxBridgeConverter:
                                     f.write(self._extracted_binary_data[f'bufferView_{i}'])
                         
                         # Update buffer views with new offsets and byteLength
+                        current_offset = 0
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
                             if i in buffer_view_offsets:
-                                buffer_view['byteOffset'] = buffer_view_offsets[i]
+                                buffer_view['byteOffset'] = current_offset
                                 # CRITICAL: Update byteLength to match the actual extracted data
                                 if f'bufferView_{i}' in self._extracted_binary_data:
                                     buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
-                                    print(f"📏 BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
+                                    current_offset += buffer_view['byteLength']
+                                    print(f"📏 BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes, offset: {buffer_view['byteOffset']:,}")
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -1524,59 +1526,8 @@ class VoxBridgeConverter:
         
         print("🔧 Fixing accessor byteLength calculations to prevent Error 23...")
         
-        # First, calculate the required size for each accessor
-        accessor_requirements = []
-        for i, accessor in enumerate(gltf_data['accessors']):
-            if 'bufferView' in accessor and accessor['bufferView'] is not None:
-                component_count = self._get_type_component_count(accessor.get('type', 'SCALAR'))
-                component_size = self._get_component_size(accessor.get('componentType', 5126))
-                accessor_count = accessor.get('count', 0)
-                required_bytes = accessor_count * component_count * component_size
-                
-                accessor_requirements.append({
-                    'index': i,
-                    'required_bytes': required_bytes,
-                    'current_buffer_view': accessor['bufferView'],
-                    'accessor': accessor
-                })
-        
-        # Sort buffer views by size (largest first) for better distribution
-        buffer_view_sizes = []
-        for i, buffer_view in enumerate(gltf_data['bufferViews']):
-            buffer_view_sizes.append({
-                'index': i,
-                'size': buffer_view.get('byteLength', 0),
-                'used': 0
-            })
-        
-        buffer_view_sizes.sort(key=lambda x: x['size'], reverse=True)
-        
-        # Redistribute accessors to appropriate buffer views
-        reassignments = 0
-        for req in accessor_requirements:
-            # Find the best buffer view for this accessor
-            best_buffer_view = None
-            for bv in buffer_view_sizes:
-                if bv['size'] >= req['required_bytes'] and bv['used'] + req['required_bytes'] <= bv['size']:
-                    best_buffer_view = bv
-                    break
-            
-            if best_buffer_view and best_buffer_view['index'] != req['current_buffer_view']:
-                old_buffer_view = req['current_buffer_view']
-                req['accessor']['bufferView'] = best_buffer_view['index']
-                best_buffer_view['used'] += req['required_bytes']
-                print(f"🔄 Moved Accessor {req['index']} from BufferView {old_buffer_view} to BufferView {best_buffer_view['index']} (requires {req['required_bytes']:,} bytes)")
-                reassignments += 1
-            elif best_buffer_view:
-                # Keep in same buffer view but mark as used
-                best_buffer_view['used'] += req['required_bytes']
-            else:
-                print(f"⚠️  Accessor {req['index']}: No suitable BufferView found for {req['required_bytes']:,} bytes")
-        
-        print(f"✅ Accessor redistribution complete: {reassignments} accessors moved to prevent Error 23")
-        
-        # CRITICAL: Now adjust accessor counts to match the actual available data
-        print("🔧 Adjusting accessor counts to match available buffer data...")
+        # CRITICAL FIX: Don't redistribute accessors - just ensure they fit in their assigned buffer views
+        # The original buffer view assignments are correct and should be preserved
         
         for i, accessor in enumerate(gltf_data['accessors']):
             if 'bufferView' in accessor and accessor['bufferView'] is not None:
@@ -1616,9 +1567,10 @@ class VoxBridgeConverter:
                             # Force the count to fit
                             forced_count = buffer_view_size // bytes_per_element
                             if forced_count > 0:
-                                print(f"🔄 Accessor {i}: Forcing count to {forced_count} to prevent Error 23")
                                 accessor['count'] = forced_count
-                                print(f"✅ Accessor {i}: Final count set to {accessor['count']}")
+                                print(f"🔄 Accessor {i}: Final forced count: {accessor['count']}")
+                            else:
+                                print(f"❌ Accessor {i}: Cannot fit even 1 element in BufferView {buffer_view_index}")
         
         print("✅ Accessor count adjustments complete")
     
