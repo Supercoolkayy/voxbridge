@@ -417,18 +417,15 @@ def convert(
     # Auto-generate output path if not specified
     if output is None:
         input_stem = input_file.stem
-        # Preserve the original file extension for better compatibility
-        if input_file.suffix.lower() == '.glb':
-            output = input_file.parent / f"{input_stem}_{target}_clean.glb"
-        else:
-            output = input_file.parent / f"{input_stem}_{target}_clean.gltf"
+        # Always use .gltf extension since we no longer generate GLB files
+        output = input_file.parent / f"{input_stem}_{target}_clean.gltf"
     else:
-        # Ensure output has proper extension
+        # Ensure output has proper extension - always use .gltf
         if not output.suffix:
-            if input_file.suffix.lower() == '.glb':
-                output = output.with_suffix('.glb')
-            else:
-                output = output.with_suffix('.gltf')
+            output = output.with_suffix('.gltf')
+        elif output.suffix.lower() == '.glb':
+            # Convert .glb to .gltf since we don't generate GLB files
+            output = output.with_suffix('.gltf')
     
     # Check if output file exists and handle force flag
     if output.exists() and not force:
@@ -639,7 +636,8 @@ def batch(
         
         # Generate output path
         relative_path = file_path.relative_to(input_dir)
-        output_path = output_dir / relative_path.with_suffix(f"_{target}_clean{file_path.suffix}")
+        # Always use .gltf extension since we no longer generate GLB files
+        output_path = output_dir / relative_path.with_suffix(f"_{target}_clean.gltf")
         
         # Create output subdirectory if needed
         output_path.parent.mkdir(parents=True, exist_ok=True)

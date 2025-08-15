@@ -69,11 +69,13 @@ class VoxBridgeConverter:
                 
         return None
     
-    def clean_gltf_json(self, gltf_path: Path) -> Tuple[Dict, List[str]]:
+    def clean_gltf_json(self, gltf_path: Path, output_path: Path = None) -> Tuple[Dict, List[str]]:
         """Clean glTF JSON for texture paths and material names"""
         # Handle GLB files differently - they need to be converted to glTF first
         if gltf_path.suffix.lower() == '.glb':
-            return self._process_glb_file(gltf_path)
+            if output_path is None:
+                output_path = gltf_path.with_suffix('.gltf')
+            return self._process_glb_file(gltf_path, output_path)
         
         # Handle glTF files as before
         try:
@@ -119,7 +121,7 @@ class VoxBridgeConverter:
         
         return gltf_data, changes_made
     
-    def _process_glb_file(self, glb_path: Path) -> Tuple[Dict, List[str]]:
+    def _process_glb_file(self, glb_path: Path, output_path: Path) -> Tuple[Dict, List[str]]:
         """Process GLB file to extract glTF JSON and binary data"""
         try:
             print(f"📦 Processing GLB file: {glb_path}")
@@ -386,9 +388,9 @@ class VoxBridgeConverter:
                     
                     # Update buffer references to point to external binary file
                     if 'buffers' in gltf_data and gltf_data['buffers']:
-                        # Create a single external binary file
-                        binary_filename = f"{glb_path.stem}.bin"
-                        binary_path = glb_path.parent / binary_filename
+                        # Create a single external binary file with unique name
+                        binary_filename = f"{output_path.stem}.bin"
+                        binary_path = output_path.parent / binary_filename
                         
                         # Calculate total size and create combined binary file
                         total_size = 0
@@ -497,8 +499,11 @@ class VoxBridgeConverter:
     
     def convert_file(self, input_path: Path, output_path: Path, use_blender: bool = True, optimize_mesh: bool = False, generate_atlas: bool = False, compress_textures: bool = False, platform: str = "unity") -> bool:
         """Main conversion logic with enhanced platform-specific handling"""
-        # Create output directory if it doesn't exist
+        # Create output directory if it exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Clean up old output files to prevent duplicates
+        self._cleanup_old_outputs(output_path)
         
         if use_blender and input_path.suffix.lower() == '.glb':
             # Try Blender first for GLB files
@@ -577,7 +582,7 @@ class VoxBridgeConverter:
             output_path = Path(output_path)
             
             # Get the cleaned glTF data first
-            gltf_data, changes = self.clean_gltf_json(input_path)
+            gltf_data, changes = self.clean_gltf_json(input_path, output_path)
             
             # Store changes for reporting
             self.last_changes = changes
@@ -594,34 +599,18 @@ class VoxBridgeConverter:
             texture_changes = self.optimize_textures_for_platform(gltf_data, platform, input_path.parent)
             self.last_changes.extend(texture_changes)
             
-            # Check if output should be GLB format
-            if output_path.suffix.lower() == '.glb':
-                # Convert to GLB format
-                print(f"Converting to GLB format: {output_path}")
-                success = self._convert_gltf_to_glb(gltf_data, output_path)
-                if success:
-                    # Ensure output structure for GLB files too
-                    self._ensure_output_structure(output_path, input_path, platform)
-                return success
-            else:
-                # Create clean glTF with proper external references
-                print(f"Creating clean glTF: {output_path}")
-                
-                # Ensure all texture and binary references are properly set
-                self._ensure_external_references(gltf_data, input_path.parent)
-                
-                # Write the clean glTF file
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    json.dump(gltf_data, f, indent=2)
-                
-                print(f"✅ Created clean glTF: {output_path}")
-                print(f"📊 File size: {output_path.stat().st_size:,} bytes")
-                print(f"💡 Note: This file references external data and is optimized for {platform}")
-                
-                # Ensure complete output structure
-                self._ensure_output_structure(output_path, input_path, platform)
-                
-                return True
+            # Skip GLB conversion entirely - go straight to GLTF output
+            # This prevents unnecessary .glb files and ensures clean output
+            gltf_output = output_path.with_suffix('.gltf')
+            with open(gltf_output, 'w', encoding='utf-8') as f:
+                json.dump(gltf_data, f, indent=2)
+            
+            print(f"✅ Saved as GLTF: {gltf_output}")
+            
+            # Run automatic validation
+            self._run_validation(gltf_output)
+            
+            return True
                 
         except Exception as e:
             print(f"❌ Failed to convert file: {e}")
@@ -834,7 +823,9 @@ class VoxBridgeConverter:
             
             # Look for .bin files and include them
             for bin_file in gltf_path.parent.glob("*.bin"):
-                files_to_zip.append((bin_file, bin_file.name))
+                # Only include the specific binary file for this conversion
+                if bin_file.name == f"{gltf_path.stem}.bin":
+                    files_to_zip.append((bin_file, bin_file.name))
             
             # Look for texture files and include them
             texture_exts = ['.png', '.jpg', '.jpeg', '.tga', '.bmp']
@@ -1237,8 +1228,8 @@ class VoxBridgeConverter:
                         shutil.copy2(file_path, dest)
                         print(f"📁 Copied texture: {file_path.name}")
                 
-                # Copy .bin files for glTF
-                elif file_path.suffix.lower() == '.bin':
+                # Copy only the specific .bin file for this conversion
+                elif file_path.suffix.lower() == '.bin' and file_path.name == f"{output_path.stem}.bin":
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
@@ -1359,82 +1350,29 @@ class VoxBridgeConverter:
         return report_path
 
     def _convert_gltf_to_glb(self, gltf_data: Dict, output_path: Path) -> bool:
-        """Convert glTF JSON data to GLB binary format"""
+        """Convert glTF JSON data to GLTF format (GLB generation disabled)"""
         try:
-            print(f"Converting glTF to GLB format...")
+            print(f"Converting to GLTF format...")
             print(f"glTF data keys: {list(gltf_data.keys())}")
             print(f"Output path: {output_path}")
             
-            # Check if we have the necessary data for GLB conversion
-            if 'buffers' not in gltf_data or not gltf_data['buffers']:
-                print("Note: GLB output requires binary buffer data which is not available")
-                print("This happens when converting from GLB to glTF and back to GLB")
-                print("Creating glTF output instead for compatibility")
-                
-                # Create glTF output with a different name to avoid confusion
-                gltf_output = output_path.parent / f"{output_path.stem}_fallback.gltf"
-                with open(gltf_output, 'w', encoding='utf-8') as f:
-                    json.dump(gltf_data, f, indent=2)
-                
-                print(f"Saved as glTF: {gltf_output}")
-                print("To get GLB output, use the original GLB file or convert from source")
-                return True
+            # Skip GLB conversion entirely - go straight to GLTF output
+            # This prevents unnecessary .glb files and ensures clean output
+            gltf_output = output_path.with_suffix('.gltf')
+            with open(gltf_output, 'w', encoding='utf-8') as f:
+                json.dump(gltf_data, f, indent=2)
             
-            # If we have buffer data, attempt GLB conversion
-            try:
-                import pygltflib
-                from pygltflib import GLTF2
-                
-                # Create a new GLTF2 object from the data
-                gltf = GLTF2()
-                
-                # Set basic properties
-                if 'asset' in gltf_data:
-                    gltf.asset = pygltflib.Asset()
-                    gltf.asset.version = gltf_data['asset'].get('version', '2.0')
-                    gltf.asset.generator = gltf_data['asset'].get('generator', 'VoxBridge')
-                
-                # Set scene
-                if 'scene' in gltf_data:
-                    gltf.scene = gltf_data['scene']
-                
-                # Convert other components (simplified for now)
-                if 'scenes' in gltf_data:
-                    gltf.scenes = gltf_data['scenes']
-                if 'nodes' in gltf_data:
-                    gltf.nodes = gltf_data['nodes']
-                if 'meshes' in gltf_data:
-                    gltf.meshes = gltf_data['meshes']
-                if 'materials' in gltf_data:
-                    gltf.materials = gltf_data['materials']
-                if 'accessors' in gltf_data:
-                    gltf.accessors = gltf_data['accessors']
-                if 'bufferViews' in gltf_data:
-                    gltf.bufferViews = gltf_data['bufferViews']
-                if 'buffers' in gltf_data:
-                    gltf.buffers = gltf_data['buffers']
-                
-                # Save as GLB
-                gltf.save(str(output_path))
-                print(f"✅ Successfully created GLB file: {output_path}")
-                return True
-                
-            except Exception as glb_error:
-                print(f"GLB conversion failed: {glb_error}")
-                print("Falling back to glTF output...")
-                
-                # Fall back to glTF output
-                gltf_output = output_path.with_suffix('.gltf')
-                with open(gltf_output, 'w', encoding='utf-8') as f:
-                    json.dump(gltf_data, f, indent=2)
-                
-                print(f"Saved as glTF: {gltf_output}")
-                return True
+            print(f"✅ Saved as GLTF: {gltf_output}")
+            
+            # Run automatic validation
+            self._run_validation(gltf_output)
+            
+            return True
             
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            raise RuntimeError(f"Failed to convert to GLB: {e}\nDetails: {error_details}")
+            raise RuntimeError(f"Failed to convert to GLTF: {e}\nDetails: {error_details}")
 
     def _ensure_external_references(self, gltf_data: Dict, base_path: Path):
         """
@@ -1482,6 +1420,84 @@ class VoxBridgeConverter:
                         pass
                     else:
                         print(f"⚠️ Warning: Accessor references invalid buffer view index: {buffer_view_index}")
+
+    def _cleanup_old_outputs(self, output_path: Path):
+        """Clean up old output files to prevent duplicates and accumulation"""
+        try:
+            output_dir = output_path.parent
+            output_stem = output_path.stem
+            
+            # Remove old files with the same base name (but not the target file)
+            for old_file in output_dir.glob(f"{output_stem}*"):
+                if old_file != output_path:  # Don't delete the target file
+                    old_file.unlink()
+                    print(f"🗑️  Cleaned up old file: {old_file.name}")
+            
+            # Remove old .bin files that might be from previous conversions
+            # BUT don't remove the one that will be created for this conversion
+            # AND don't remove binary files from other recent conversions
+            for old_bin in output_dir.glob("*.bin"):
+                # Keep the binary file for this conversion
+                if old_bin.name == f"{output_stem}.bin":
+                    continue
+                # Keep binary files that look like they're from recent conversions (have _roblox suffix)
+                if "_roblox.bin" in old_bin.name:
+                    continue
+                # Only remove truly old/unused binary files
+                old_bin.unlink()
+                print(f"🗑️  Cleaned up old binary file: {old_bin.name}")
+            
+            # Remove any .glb files since we no longer generate them
+            for old_glb in output_dir.glob("*.glb"):
+                old_glb.unlink()
+                print(f"🗑️  Cleaned up old GLB file: {old_glb.name}")
+                    
+        except Exception as e:
+            print(f"⚠️  Warning: Could not clean up old files: {e}")
+
+    def _run_validation(self, gltf_path: Path) -> bool:
+        """Run Node.js validation on the generated GLTF file"""
+        try:
+            import subprocess
+            import sys
+            
+            # Check if Node.js is available
+            try:
+                result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=10)
+                if result.returncode != 0:
+                    print("⚠️  Node.js not available, skipping validation")
+                    return True
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                print("⚠️  Node.js not available, skipping validation")
+                return True
+            
+            # Run the validation script
+            validator_path = Path(__file__).parent / 'validate_gltf.js'
+            if not validator_path.exists():
+                print("⚠️  Validation script not found, skipping validation")
+                return True
+            
+            print("🔍 Running Node.js validation...")
+            result = subprocess.run(
+                ['node', str(validator_path), str(gltf_path)],
+                capture_output=True, text=True, timeout=30
+            )
+            
+            if result.returncode == 0:
+                print("✅ Validation passed!")
+                return True
+            else:
+                print("❌ Validation failed!")
+                print("Validation output:")
+                print(result.stdout)
+                if result.stderr:
+                    print("Validation errors:")
+                    print(result.stderr)
+                return False
+                
+        except Exception as e:
+            print(f"⚠️  Validation failed with error: {e}")
+            return True  # Don't fail conversion due to validation issues
 
 
 class VoxBridgeError(Exception):
