@@ -114,47 +114,38 @@ def print_conversion_summary(converter: VoxBridgeConverter, output_path: Path, v
     """Print the final conversion summary."""
     print_step_header(4, 4, "Summary")
     
-    # Get file size
+    # Get asset info from converter's stored statistics
+    stats = converter.get_last_conversion_stats()
+    meshes = stats.get('meshes', 0)
+    materials = stats.get('materials', 0)
+    textures = stats.get('textures', 0)
+    nodes = stats.get('nodes', 0)
+    
+    # Get file size - check if we have a ZIP file or the original file
     try:
-        file_size = output_path.stat().st_size
-        size_kb = file_size / 1024
-        if size_kb >= 1024:
-            size_str = f"{size_kb/1024:.1f} MB"
+        # Check if output is a ZIP file
+        if output_path.suffix.lower() == '.zip':
+            # Use ZIP file size
+            file_size = output_path.stat().st_size
+            size_kb = file_size / 1024
+            if size_kb >= 1024:
+                size_str = f"{size_kb/1024:.1f} MB"
+            else:
+                size_str = f"{size_kb:.0f} KB"
+            size_str += " (ZIP)"
         else:
-            size_str = f"{size_kb:.0f} KB"
+            # Use the stored file size from conversion stats
+            stored_size = stats.get('file_size', 0)
+            if stored_size > 0:
+                size_kb = stored_size / 1024
+                if size_kb >= 1024:
+                    size_str = f"{size_kb/1024:.1f} MB"
+                else:
+                    size_str = f"{size_kb:.0f} KB"
+            else:
+                size_str = "unknown"
     except:
         size_str = "unknown"
-    
-    # Get asset info from converter validation
-    try:
-        # Wait a moment for file to be written
-        import time
-        time.sleep(0.1)
-        
-        if output_path.exists():
-            stats = converter.validate_output(output_path)
-            meshes = stats.get('meshes', 0)
-            materials = stats.get('materials', 0)
-            textures = stats.get('textures', 0)
-            nodes = stats.get('nodes', 0)
-        else:
-            # Fallback: try to get stats from the input file
-            try:
-                stats = converter.validate_output(input_path)
-                meshes = stats.get('meshes', 0)
-                materials = stats.get('materials', 0)
-                textures = stats.get('textures', 0)
-                nodes = stats.get('nodes', 0)
-            except:
-                meshes = 0
-                materials = 0
-                textures = 0
-                nodes = 0
-    except:
-        meshes = 0
-        materials = 0
-        textures = 0
-        nodes = 0
     
     print_step_info(f"Meshes:    {meshes}", 1)
     print_step_info(f"Materials: {materials}", 1)
@@ -249,7 +240,7 @@ def handle_conversion(
                 time.sleep(0.1)
                 
                 # Process the file
-                success = converter.convert_file(
+                result = converter.convert_file(
                     input_path,
                     output_path,
                     use_blender=not no_blender,
@@ -260,7 +251,7 @@ def handle_conversion(
                 progress.update(task, completed=100, description="[bold green]Completed!")
         else:
             # No progress bar in verbose mode
-            success = converter.convert_file(
+            result = converter.convert_file(
                 input_path,
                 output_path,
                 use_blender=not no_blender,
@@ -268,13 +259,21 @@ def handle_conversion(
                 platform=target
             )
         
-        if not success:
+        if not result:
             print_step_info("Conversion failed", 1)
             return False
         
+        # Check if we got a ZIP file back from the converter
+        final_output_path = output_path
+        if hasattr(converter, '_last_conversion_stats') and converter._last_conversion_stats:
+            # If we have conversion stats, the file was packaged into a ZIP
+            zip_path = output_path.parent / f"{output_path.stem}.zip"
+            if zip_path.exists():
+                final_output_path = zip_path
+        
         # Get file info
         try:
-            file_size = output_path.stat().st_size
+            file_size = final_output_path.stat().st_size
             size_mb = file_size / (1024 * 1024)
             if size_mb >= 1.0:
                 print_step_info(f"GLB parsed: {size_mb:.1f} MB", 1)
@@ -286,7 +285,10 @@ def handle_conversion(
         
         print_step_info("Buffers extracted: completed", 1)
         print_step_info("BIN file created", 1)
-        print_step_info(f"GLTF written: {output_path.name}", 1)
+        if final_output_path.suffix.lower() == '.zip':
+            print_step_info(f"GLTF written: {final_output_path.stem}.gltf (packaged in {final_output_path.name})", 1)
+        else:
+            print_step_info(f"GLTF written: {final_output_path.name}", 1)
         
         # Step 3: Validation (placeholder for now)
         validation_results = {
@@ -297,7 +299,7 @@ def handle_conversion(
         print_validation_summary(validation_results, verbose)
         
         # Step 4: Summary
-        print_conversion_summary(converter, output_path, verbose)
+        print_conversion_summary(converter, final_output_path, verbose)
         
         # Final status
         print_final_status(True, validation_results)

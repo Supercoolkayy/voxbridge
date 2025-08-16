@@ -29,6 +29,7 @@ class VoxBridgeConverter:
         self.blender_script_path = Path(__file__).parent / 'blender_cleanup.py'
         self._extracted_binary_data = {}
         self.last_changes = []
+        self._last_conversion_stats = {}
         self.debug = debug
         
     def validate_input(self, input_path: Path) -> bool:
@@ -314,6 +315,13 @@ class VoxBridgeConverter:
             if self.debug:
                 print(f"Assimp: Successfully exported to {gltf_output}")
             
+            # Package the output files into a ZIP archive
+            zip_path = self._package_output_files(output_path, gltf_output)
+            if zip_path.suffix == '.zip':
+                print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+            else:
+                print(f"Conversion complete. Output saved as {gltf_output.name}")
+            
             return True
             
         except ImportError:
@@ -372,6 +380,13 @@ class VoxBridgeConverter:
                 if self.debug:
                     print(f"Trimesh: Successfully exported to {gltf_output}")
                 
+                # Package the output files into a ZIP archive
+                zip_path = self._package_output_files(output_path, gltf_output)
+                if zip_path.suffix == '.zip':
+                    print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                else:
+                    print(f"Conversion complete. Output saved as {gltf_path.name}")
+                
                 return True
                 
             except Exception as export_error:
@@ -397,6 +412,88 @@ class VoxBridgeConverter:
                     print("To fix this, install the assimp library:")
                     print("  Ubuntu/Debian: sudo apt-get install libassimp-dev")
             return False
+    
+    def _package_output_files(self, output_path: Path, gltf_path: Path) -> Path:
+        """Package all output files into a ZIP archive and clean up temporary files"""
+        # Store statistics BEFORE packaging (when .gltf file still exists)
+        stats = self.validate_output(gltf_path) if gltf_path.exists() else {}
+        self._last_conversion_stats = stats
+        
+        try:
+            # Get the base name for the ZIP file
+            zip_name = output_path.stem + ".zip"
+            zip_path = output_path.parent / zip_name
+            
+            if self.debug:
+                print(f"Packaging output files into {zip_name}...")
+            
+            # Find all related files to package
+            files_to_package = []
+            
+            # Always include the main GLTF file
+            if gltf_path.exists():
+                files_to_package.append(gltf_path)
+            
+            # Look for related files in the same directory
+            output_dir = output_path.parent
+            base_name = output_path.stem
+            
+            # Common file patterns to look for
+            patterns = [
+                f"{base_name}*.bin",      # Binary files
+                f"{base_name}*.png",      # Texture files
+                f"{base_name}*.jpg",      # Texture files
+                f"{base_name}*.jpeg",     # Texture files
+                f"{base_name}*.ktx2",     # Compressed textures
+                f"{base_name}*.dds",      # DirectDraw textures
+                f"{base_name}*.glb",      # GLB files (if generated)
+                f"gltf_buffer_*.bin",     # Trimesh buffer files
+                f"{base_name}_*.bin",     # Other binary variations
+            ]
+            
+            # Collect all matching files
+            for pattern in patterns:
+                matching_files = list(output_dir.glob(pattern))
+                for file_path in matching_files:
+                    if file_path != gltf_path and file_path not in files_to_package:
+                        files_to_package.append(file_path)
+            
+            if self.debug:
+                print(f"Found {len(files_to_package)} files to package")
+            
+            # Create ZIP archive
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in files_to_package:
+                    if file_path.exists():
+                        # Add file to ZIP with relative path
+                        arcname = file_path.name
+                        zipf.write(file_path, arcname)
+                        if self.debug:
+                            print(f"  Added to ZIP: {arcname}")
+            
+            # Clean up temporary files (keep only the ZIP)
+            files_removed = 0
+            for file_path in files_to_package:
+                if file_path.exists() and file_path != zip_path:
+                    try:
+                        file_path.unlink()
+                        files_removed += 1
+                        if self.debug:
+                            print(f"  Cleaned up: {file_path.name}")
+                    except Exception as e:
+                        if self.debug:
+                            print(f"  Warning: Could not remove {file_path.name}: {e}")
+            
+            if self.debug:
+                print(f"Packaging complete: {zip_name} ({files_removed} temporary files cleaned up)")
+            
+            return zip_path
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: ZIP packaging failed: {e}")
+            # Return the original GLTF path if packaging fails
+            return gltf_path
     
     def _consolidate_trimesh_buffers(self, gltf_path: Path, bin_files: List[Path], output_path: Path):
         """Consolidate multiple .bin files into a single .bin file"""
@@ -936,6 +1033,10 @@ class VoxBridgeConverter:
         
         return stats
     
+    def get_last_conversion_stats(self) -> Dict:
+        """Get statistics from the last successful conversion"""
+        return self._last_conversion_stats.copy() if self._last_conversion_stats else {}
+    
     def convert_file(self, input_path: Path, output_path: Path, use_blender: bool = True, optimize_mesh: bool = False, generate_atlas: bool = False, compress_textures: bool = False, platform: str = "unity") -> bool:
         """Main conversion logic with layered fallback system"""
         # Create output directory if it exists
@@ -1000,7 +1101,19 @@ class VoxBridgeConverter:
         
         # Step 4: Final fallback to basic converter
         print("All advanced converters failed. Using basic converter.")
-        return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+        success = self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+        
+        if success:
+            # Package the output files into a ZIP archive
+            gltf_path = output_path.with_suffix('.gltf')
+            if gltf_path.exists():
+                zip_path = self._package_output_files(output_path, gltf_path)
+                if zip_path.suffix == '.zip':
+                    print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                else:
+                    print(f"Conversion complete. Output saved as {gltf_path.name}")
+        
+        return success
     
     def convert_with_blender(self, input_path: Path, output_path: Path, optimize_mesh: bool = False, platform: str = "unity") -> bool:
         """Convert using Blender Python script with platform-specific settings"""
@@ -1070,6 +1183,16 @@ class VoxBridgeConverter:
             if result.returncode == 0:
                 if self.debug:
                     print("Blender conversion successful!")
+                
+                # Package the output files into a ZIP archive
+                gltf_output = output_path.with_suffix('.gltf')
+                if gltf_output.exists():
+                    zip_path = self._package_output_files(output_path, gltf_output)
+                    if zip_path.suffix == '.zip':
+                        print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                    else:
+                        print(f"Conversion complete. Output saved as {gltf_output.name}")
+                
                 return True
             else:
                 # Check for specific error patterns
@@ -1171,6 +1294,13 @@ class VoxBridgeConverter:
             
             # Run automatic validation
             self._run_validation(gltf_output)
+            
+            # Package the output files into a ZIP archive
+            zip_path = self._package_output_files(output_path, gltf_output)
+            if zip_path.suffix == '.zip':
+                print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+            else:
+                print(f"Conversion complete. Output saved as {gltf_output.name}")
             
             return True
                 
