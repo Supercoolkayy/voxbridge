@@ -192,6 +192,275 @@ class VoxBridgeConverter:
         
         return paths
     
+    def _can_use_blender(self, input_path: Path) -> bool:
+        """Check if Blender can be used for the given input file"""
+        # Blender works best with GLB files
+        if input_path.suffix.lower() == '.glb':
+            return True
+        
+        # Check if Blender executable is available
+        blender_exe = self.find_blender()
+        if not blender_exe:
+            return False
+        
+        # Check if Blender script exists
+        if not self.blender_script_path.exists():
+            return False
+        
+        return True
+    
+    def _can_use_assimp(self) -> bool:
+        """Check if Assimp can be used (both pyassimp and C++ library)"""
+        try:
+            import pyassimp
+            # Try to load a simple test to see if the C++ library is available
+            from pyassimp import helper
+            helper.search_library()
+            return True
+        except:
+            return False
+    
+    def _can_use_trimesh(self) -> bool:
+        """Check if Trimesh can be used"""
+        try:
+            import trimesh
+            return True
+        except ImportError:
+            return False
+    
+    def _load_with_trimesh(self, file_path: str):
+        """Helper function to load models with Trimesh, handling both Trimesh and Scene objects"""
+        try:
+            import trimesh
+            
+            # Load the model
+            loaded_object = trimesh.load(file_path)
+            
+            if loaded_object is None:
+                return None
+            
+            # Check if it's a Scene object (multiple meshes)
+            if hasattr(loaded_object, 'geometry') and hasattr(loaded_object.geometry, 'values'):
+                # It's a Scene with multiple geometries
+                geometries = list(loaded_object.geometry.values())
+                
+                if not geometries:
+                    raise ValueError("Scene contains no valid geometries")
+                
+                if self.debug:
+                    print(f"Trimesh: Loaded Scene with {len(geometries)} geometries")
+                
+                # If only one geometry, return it directly
+                if len(geometries) == 1:
+                    if self.debug:
+                        print("Trimesh: Single geometry found, using directly")
+                    return geometries[0]
+                
+                # Multiple geometries found, combine them into one mesh
+                if self.debug:
+                    print(f"Trimesh: Combining {len(geometries)} geometries into single mesh...")
+                
+                # Use trimesh.util.concatenate to combine all meshes
+                from trimesh.util import concatenate
+                combined_mesh = concatenate(geometries)
+                
+                if self.debug:
+                    print(f"Trimesh: Successfully combined {len(geometries)} geometries into 1 mesh")
+                
+                return combined_mesh
+            
+            # Check if it's a Trimesh object (single mesh)
+            elif hasattr(loaded_object, 'faces') and hasattr(loaded_object, 'vertices'):
+                if self.debug:
+                    print("Trimesh: Loaded single mesh directly")
+                return loaded_object
+            
+            else:
+                # Unknown object type
+                raise ValueError(f"Unknown object type returned by trimesh.load(): {type(loaded_object)}")
+                
+        except Exception as e:
+            if self.debug:
+                print(f"Trimesh loading failed: {e}")
+            raise e
+    
+    def convert_with_assimp(self, input_path: Path, output_path: Path, platform: str = "unity") -> bool:
+        """Convert using Assimp (pyassimp) library"""
+        try:
+            import pyassimp
+            from pyassimp import load, export
+            
+            if self.debug:
+                print("Loading model with Assimp...")
+            
+            # Load the model with Assimp
+            scene = load(str(input_path))
+            
+            if not scene or not scene.meshes:
+                if self.debug:
+                    print("Assimp: No valid meshes found in the model")
+                return False
+            
+            if self.debug:
+                print(f"Assimp: Loaded {len(scene.meshes)} meshes")
+            
+            # Export to GLTF
+            gltf_output = output_path.with_suffix('.gltf')
+            export(scene, str(gltf_output), file_type='gltf2')
+            
+            # Release the scene
+            pyassimp.release(scene)
+            
+            if self.debug:
+                print(f"Assimp: Successfully exported to {gltf_output}")
+            
+            return True
+            
+        except ImportError:
+            if self.debug:
+                print("Assimp (pyassimp) not available")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Assimp conversion failed: {e}")
+                # Check if it's the common "assimp library not found" error
+                if "assimp library not found" in str(e):
+                    print("Note: pyassimp is installed but the assimp C++ library is missing.")
+                    print("To fix this, install the assimp library:")
+                    print("  Ubuntu/Debian: sudo apt-get install libassimp-dev")
+                    print("  macOS: brew install assimp")
+                    print("  Windows: Download from https://github.com/assimp/assimp/releases")
+            return False
+    
+    def convert_with_trimesh(self, input_path: Path, output_path: Path, platform: str = "unity") -> bool:
+        """Convert using Trimesh library with consolidated binary output"""
+        try:
+            import trimesh
+            import json
+            
+            if self.debug:
+                print("Loading model with Trimesh...")
+            
+            # Load the model with Trimesh using the helper function
+            mesh = self._load_with_trimesh(str(input_path))
+            
+            if mesh is None:
+                if self.debug:
+                    print("Trimesh: Failed to load model")
+                return False
+            
+            if self.debug:
+                print(f"Trimesh: Loaded model with {len(mesh.faces)} faces")
+            
+            # Export to GLTF with embedded binary data (no separate .bin files)
+            gltf_output = output_path.with_suffix('.gltf')
+            
+            # Use embedded export to avoid multiple .bin files
+            try:
+                # Try to export as embedded GLTF (single file)
+                mesh.export(str(gltf_output), file_type='gltf', include_normals=True)
+                
+                # Check if separate .bin files were created
+                bin_files = list(gltf_output.parent.glob(f"{gltf_output.stem}*.bin"))
+                if len(bin_files) > 1:
+                    if self.debug:
+                        print(f"Trimesh created {len(bin_files)} separate .bin files, consolidating...")
+                    
+                    # Consolidate into single .bin file
+                    self._consolidate_trimesh_buffers(gltf_output, bin_files, output_path)
+                
+                if self.debug:
+                    print(f"Trimesh: Successfully exported to {gltf_output}")
+                
+                return True
+                
+            except Exception as export_error:
+                if self.debug:
+                    print(f"Trimesh export failed: {export_error}")
+                return False
+            
+        except ImportError:
+            if self.debug:
+                print("Trimesh not available")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Trimesh conversion failed: {e}")
+                # Check for common NumPy compatibility issues
+                if "ptp" in str(e) and "NumPy" in str(e):
+                    print("Note: NumPy compatibility issue detected.")
+                    print("To fix this, try updating Trimesh:")
+                    print("  pip install --upgrade trimesh")
+                    print("  Or downgrade NumPy: pip install 'numpy<2.0'")
+                elif "assimp" in str(e).lower():
+                    print("Note: Trimesh requires the assimp library for some formats.")
+                    print("To fix this, install the assimp library:")
+                    print("  Ubuntu/Debian: sudo apt-get install libassimp-dev")
+            return False
+    
+    def _consolidate_trimesh_buffers(self, gltf_path: Path, bin_files: List[Path], output_path: Path):
+        """Consolidate multiple .bin files into a single .bin file"""
+        try:
+            # Read the GLTF file
+            with open(gltf_path, 'r') as f:
+                gltf_data = json.load(f)
+            
+            # Create single consolidated .bin file
+            consolidated_bin = output_path.with_suffix('.bin')
+            total_size = 0
+            
+            with open(consolidated_bin, 'wb') as out_file:
+                # Process each buffer in order
+                for i, buffer_info in enumerate(gltf_data.get('buffers', [])):
+                    if i < len(bin_files):
+                        bin_file = bin_files[i]
+                        if bin_file.exists():
+                            with open(bin_file, 'rb') as in_file:
+                                data = in_file.read()
+                                out_file.write(data)
+                                total_size += len(data)
+                                
+                                # Update buffer info
+                                buffer_info['uri'] = consolidated_bin.name
+                                buffer_info['byteLength'] = len(data)
+                                
+                                # Update bufferView offsets
+                                for buffer_view in gltf_data.get('bufferViews', []):
+                                    if buffer_view.get('buffer') == i:
+                                        buffer_view['buffer'] = 0  # All point to first buffer
+                                        if i > 0:
+                                            # Adjust byteOffset for subsequent buffers
+                                            buffer_view['byteOffset'] = buffer_view.get('byteOffset', 0) + sum(
+                                                len(open(bin_files[j], 'rb').read()) for j in range(i)
+                                            )
+            
+            # Update all bufferViews to point to the first buffer
+            for buffer_view in gltf_data.get('bufferViews', []):
+                buffer_view['buffer'] = 0
+            
+            # Update buffers array to only have one entry
+            gltf_data['buffers'] = [{
+                'uri': consolidated_bin.name,
+                'byteLength': total_size
+            }]
+            
+            # Write updated GLTF
+            with open(gltf_path, 'w') as f:
+                json.dump(gltf_data, f, indent=2)
+            
+            # Clean up individual .bin files
+            for bin_file in bin_files:
+                if bin_file != consolidated_bin:
+                    bin_file.unlink()
+            
+            if self.debug:
+                print(f"Consolidated {len(bin_files)} .bin files into {consolidated_bin.name}")
+                
+        except Exception as e:
+            if self.debug:
+                print(f"Failed to consolidate buffers: {e}")
+            # If consolidation fails, just continue with the original files
+    
     def clean_gltf_json(self, gltf_path: Path, output_path: Path = None) -> Tuple[Dict, List[str]]:
         """Clean glTF JSON for texture paths and material names"""
         # Handle GLB files differently - they need to be converted to glTF first
@@ -668,15 +937,17 @@ class VoxBridgeConverter:
         return stats
     
     def convert_file(self, input_path: Path, output_path: Path, use_blender: bool = True, optimize_mesh: bool = False, generate_atlas: bool = False, compress_textures: bool = False, platform: str = "unity") -> bool:
-        """Main conversion logic with enhanced platform-specific handling"""
+        """Main conversion logic with layered fallback system"""
         # Create output directory if it exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Clean up old output files to prevent duplicates
         self._cleanup_old_outputs(output_path)
         
-        if use_blender and input_path.suffix.lower() == '.glb':
-            # Try Blender first for GLB files
+        # Layered fallback system: Blender → Assimp → Trimesh → Basic Converter
+        
+        # Step 1: Try Blender CLI conversion (if enabled and supported)
+        if use_blender and self._can_use_blender(input_path):
             try:
                 if self.debug:
                     print("Attempting Blender conversion...")
@@ -685,19 +956,51 @@ class VoxBridgeConverter:
                         print("Blender conversion successful!")
                     return True
                 else:
-                    if self.debug:
-                        print("Blender conversion failed, falling back to basic GLB processing...")
-                    # Fall back to basic GLB processing
-                    return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+                    print("Blender conversion failed. Trying Assimp...")
             except Exception as e:
                 if self.debug:
                     print(f"Blender conversion failed with error: {e}")
-                    print("Falling back to basic GLB processing...")
-                # Fall back to basic GLB processing
-                return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+                print("Blender conversion failed. Trying Assimp...")
+        
+        # Step 2: Try Assimp conversion (if available)
+        if self._can_use_assimp():
+            try:
+                if self.debug:
+                    print("Attempting Assimp conversion...")
+                if self.convert_with_assimp(input_path, output_path, platform=platform):
+                    if self.debug:
+                        print("Assimp conversion successful!")
+                    return True
+                else:
+                    print("Assimp conversion failed. Trying Trimesh...")
+            except Exception as e:
+                if self.debug:
+                    print(f"Assimp conversion failed with error: {e}")
+                print("Assimp conversion failed. Trying Trimesh...")
         else:
-            # Use JSON parsing for glTF files or when Blender is disabled
-            return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+            print("Assimp not available (missing C++ library). Trying Trimesh...")
+        
+        # Step 3: Try Trimesh conversion (if available)
+        if self._can_use_trimesh():
+            try:
+                if self.debug:
+                    print("Attempting Trimesh conversion...")
+                if self.convert_with_trimesh(input_path, output_path, platform=platform):
+                    if self.debug:
+                        print("Trimesh conversion successful!")
+                    return True
+                else:
+                    print("Trimesh conversion failed. Using basic converter...")
+            except Exception as e:
+                if self.debug:
+                    print(f"Trimesh conversion failed with error: {e}")
+                print("Trimesh conversion failed. Using basic converter...")
+        else:
+            print("Trimesh not available. Using basic converter...")
+        
+        # Step 4: Final fallback to basic converter
+        print("All advanced converters failed. Using basic converter.")
+        return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
     
     def convert_with_blender(self, input_path: Path, output_path: Path, optimize_mesh: bool = False, platform: str = "unity") -> bool:
         """Convert using Blender Python script with platform-specific settings"""
