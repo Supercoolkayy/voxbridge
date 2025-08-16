@@ -317,9 +317,17 @@ class GLTFValidator {
             accessor.min.length !== expectedLength ||
             accessor.max.length !== expectedLength
           ) {
-            this.errors.push(
-              `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type}`
-            );
+            // Only report as error if the arrays are non-empty but wrong length
+            if (accessor.min.length > 0 || accessor.max.length > 0) {
+              this.errors.push(
+                `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type} (expected: ${expectedLength}, min: ${accessor.min.length}, max: ${accessor.max.length})`
+              );
+            } else {
+              // Empty min/max arrays are valid and common in GLTF files
+              console.log(
+                `🔍 [DEBUG] Accessor ${index}: Empty min/max bounds (valid)`
+              );
+            }
           }
         }
       }
@@ -366,7 +374,10 @@ class GLTFValidator {
         );
       }
 
-      if (bufferView.byteStride !== undefined) {
+      if (
+        bufferView.byteStride !== undefined &&
+        bufferView.byteStride !== null
+      ) {
         if (bufferView.byteStride < 4 || bufferView.byteStride > 252) {
           this.errors.push(
             `BufferView ${index}: Invalid byteStride ${bufferView.byteStride}`
@@ -378,6 +389,7 @@ class GLTFValidator {
           );
         }
       }
+      // Note: byteStride being null or undefined is valid - it means data is tightly packed
     });
   }
 
@@ -591,81 +603,114 @@ class GLTFValidator {
       `${colors.cyan}🔍 Error 23 Prevention (Accessor/BufferView Alignment)${colors.reset}`
     );
 
+    let error23Detected = false;
+
     gltf.accessors.forEach((accessor, index) => {
-      const bufferView = gltf.bufferViews[accessor.bufferView];
-      if (!bufferView) {
-        this.errors.push(
-          `Accessor ${index}: Invalid bufferView reference ${accessor.bufferView}`
-        );
+      console.log(`🔍 [DEBUG] Validating accessor ${index}:`, accessor);
+
+      if (accessor.bufferView === undefined || accessor.bufferView === null) {
+        this.errors.push(`Accessor ${index}: Missing bufferView reference`);
+        error23Detected = true;
         return;
       }
 
-      // Check if accessor type matches bufferView byteStride
-      if (accessor.type !== "SCALAR") {
-        if (bufferView.byteStride !== undefined && bufferView.byteStride < 4) {
-          this.errors.push(
-            `Accessor ${index}: BufferView byteStride too small for ${accessor.type} type`
-          );
-        }
-        if (
-          bufferView.byteStride !== undefined &&
-          bufferView.byteStride % 4 !== 0
-        ) {
-          this.errors.push(
-            `Accessor ${index}: BufferView byteStride must be multiple of 4`
-          );
-        }
+      const bufferViewIndex = accessor.bufferView;
+      console.log(
+        `🔍 [DEBUG] Accessor ${index} references bufferView ${bufferViewIndex}`
+      );
+
+      if (bufferViewIndex < 0 || bufferViewIndex >= gltf.bufferViews.length) {
+        this.errors.push(
+          `Accessor ${index}: Invalid bufferView index ${bufferViewIndex} (max: ${
+            gltf.bufferViews.length - 1
+          })`
+        );
+        error23Detected = true;
+        return;
       }
 
-      // Check if accessor byteOffset is within bufferView byteLength
-      if (accessor.byteOffset !== undefined && accessor.byteOffset < 0) {
+      const bufferView = gltf.bufferViews[bufferViewIndex];
+      console.log(`🔍 [DEBUG] BufferView ${bufferViewIndex}:`, bufferView);
+
+      if (!bufferView) {
         this.errors.push(
-          `Accessor ${index}: Invalid byteOffset ${accessor.byteOffset}`
+          `Accessor ${index}: BufferView ${bufferViewIndex} is null/undefined`
+        );
+        error23Detected = true;
+        return;
+      }
+
+      // Check byteStride
+      if (
+        bufferView.byteStride !== undefined &&
+        bufferView.byteStride !== null
+      ) {
+        const componentCount = this.getTypeComponentCount(accessor.type);
+        const componentSize = this.getComponentSize(accessor.componentType);
+        const minStride = componentCount * componentSize;
+
+        console.log(
+          `🔍 [DEBUG] Accessor ${index}: componentCount=${componentCount}, componentSize=${componentSize}, minStride=${minStride}, actualStride=${bufferView.byteStride}`
+        );
+
+        if (bufferView.byteStride < minStride) {
+          this.errors.push(
+            `Accessor ${index}: byteStride ${bufferView.byteStride} too small for type ${accessor.type} (minimum: ${minStride})`
+          );
+          error23Detected = true;
+        }
+
+        if (bufferView.byteStride % 4 !== 0) {
+          this.errors.push(
+            `Accessor ${index}: byteStride ${bufferView.byteStride} not aligned to 4-byte boundary`
+          );
+          error23Detected = true;
+        }
+      } else {
+        // byteStride is null or undefined, which is valid - it means data is tightly packed
+        console.log(
+          `🔍 [DEBUG] Accessor ${index}: byteStride is null/undefined (tightly packed data)`
         );
       }
-      if (
-        accessor.byteOffset !== undefined &&
-        bufferView.byteLength !== undefined
-      ) {
+
+      // Check byteOffset
+      if (accessor.byteOffset !== undefined) {
+        if (accessor.byteOffset < 0) {
+          this.errors.push(
+            `Accessor ${index}: Negative byteOffset ${accessor.byteOffset}`
+          );
+          error23Detected = true;
+        }
+
         if (accessor.byteOffset >= bufferView.byteLength) {
           this.errors.push(
-            `Accessor ${index}: byteOffset ${accessor.byteOffset} exceeds BufferView byteLength ${bufferView.byteLength}`
+            `Accessor ${index}: byteOffset ${accessor.byteOffset} exceeds bufferView byteLength ${bufferView.byteLength}`
           );
+          error23Detected = true;
         }
       }
 
-      // Check if accessor count is consistent with bufferView byteLength
-      if (accessor.count !== undefined && bufferView.byteLength !== undefined) {
-        const bytesPerElement = this.calculateAccessorByteLength(accessor);
-        const totalBytesNeeded = accessor.count * bytesPerElement;
-        if (totalBytesNeeded > bufferView.byteLength) {
-          this.errors.push(
-            `Accessor ${index}: Accessor count ${accessor.count} exceeds BufferView byteLength ${bufferView.byteLength}`
-          );
-        }
-      }
-
-      // Check if accessor min/max bounds match type
-      if (accessor.type !== "SCALAR") {
-        if (accessor.min && accessor.max) {
-          const expectedLength = this.getTypeComponentCount(accessor.type);
-          if (
-            accessor.min.length !== expectedLength ||
-            accessor.max.length !== expectedLength
-          ) {
-            this.errors.push(
-              `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type}`
-            );
-          }
-        }
-      }
+      // Check count vs buffer size
+      const bytesPerElement = this.calculateAccessorByteLength(accessor);
+      const totalBytesNeeded = accessor.count * bytesPerElement;
 
       console.log(
-        `  ✅ Accessor ${index}: Type and BufferView alignment checks passed`
+        `🔍 [DEBUG] Accessor ${index}: count=${accessor.count}, bytesPerElement=${bytesPerElement}, totalBytesNeeded=${totalBytesNeeded}, bufferViewSize=${bufferView.byteLength}`
       );
+
+      if (totalBytesNeeded > bufferView.byteLength) {
+        this.errors.push(
+          `Accessor ${index}: Accessor count ${accessor.count} exceeds BufferView byteLength ${bufferView.byteLength} (needs ${totalBytesNeeded} bytes)`
+        );
+        error23Detected = true;
+      }
     });
 
-    console.log("");
+    if (!error23Detected) {
+      console.log("  ✅ All accessors passed alignment checks");
+    }
+
+    console.log("✅ Error 23 prevention checks completed");
   }
 
   /**

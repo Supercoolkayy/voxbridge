@@ -122,272 +122,65 @@ class VoxBridgeConverter:
         return gltf_data, changes_made
     
     def _process_glb_file(self, glb_path: Path, output_path: Path) -> Tuple[Dict, List[str]]:
-        """Process GLB file to extract glTF JSON and binary data"""
+        """Process GLB file and convert to GLTF format"""
         try:
-            print(f"📦 Processing GLB file: {glb_path}")
+            print(f"🔍 [DEBUG] Starting GLB processing for: {glb_path}")
+            print(f"🔍 [DEBUG] Output path: {output_path}")
             
-            # Try using pygltflib first (more reliable)
+            # Try pygltflib first
             try:
                 import pygltflib
-                from pygltflib import GLTF2
+                print(f"🔍 [DEBUG] pygltflib imported successfully")
                 
-                print("Using pygltflib for GLB processing...")
-                gltf = GLTF2.load(str(glb_path))
+                # Load GLB file
+                print(f"🔍 [DEBUG] Loading GLB file with pygltflib...")
+                gltf = pygltflib.GLTF2().load(str(glb_path))
+                print(f"🔍 [DEBUG] GLB file loaded successfully")
                 
-                # Convert to dictionary format
+                # Convert to dictionary for processing
+                print(f"🔍 [DEBUG] Converting pygltflib objects to dictionary...")
                 gltf_data = {}
                 
-                # Copy all the data and convert pygltflib objects to dictionaries
-                if hasattr(gltf, 'asset') and gltf.asset:
-                    gltf_data['asset'] = {
-                        'version': gltf.asset.version,
-                        'generator': gltf.asset.generator
-                    }
+                # Process each component with detailed logging
+                components_to_process = [
+                    'asset', 'scene', 'scenes', 'nodes', 'meshes', 'materials', 
+                    'textures', 'samplers', 'images', 'accessors', 'bufferViews', 
+                    'buffers', 'animations', 'skins'
+                ]
                 
-                if hasattr(gltf, 'scene') and gltf.scene is not None:
-                    gltf_data['scene'] = gltf.scene
+                for component in components_to_process:
+                    if hasattr(gltf, component):
+                        print(f"🔍 [DEBUG] Processing component: {component}")
+                        component_data = getattr(gltf, component)
+                        
+                        if component_data is not None:
+                            if isinstance(component_data, list):
+                                print(f"🔍 [DEBUG] {component} is a list with {len(component_data)} items")
+                                gltf_data[component] = []
+                                for i, item in enumerate(component_data):
+                                    print(f"🔍 [DEBUG] Converting {component}[{i}] from {type(item).__name__}")
+                                    converted_item = self._convert_pygltflib_object(item)
+                                    gltf_data[component].append(converted_item)
+                            else:
+                                print(f"🔍 [DEBUG] {component} is a single object of type {type(component_data).__name__}")
+                                converted_item = self._convert_pygltflib_object(component_data)
+                                gltf_data[component] = converted_item
+                        else:
+                            print(f"🔍 [DEBUG] {component} is None, skipping")
+                    else:
+                        print(f"🔍 [DEBUG] {component} not found in GLB")
                 
-                if hasattr(gltf, 'scenes') and gltf.scenes:
-                    # Convert pygltflib Scene objects to dictionaries
-                    gltf_data['scenes'] = []
-                    for scene in gltf.scenes:
-                        scene_dict = {}
-                        if hasattr(scene, 'nodes') and scene.nodes:
-                            scene_dict['nodes'] = scene.nodes
-                        if hasattr(scene, 'name') and scene.name:
-                            scene_dict['name'] = scene.name
-                        gltf_data['scenes'].append(scene_dict)
-                
-                if hasattr(gltf, 'nodes') and gltf.nodes:
-                    # Convert pygltflib Node objects to dictionaries
-                    gltf_data['nodes'] = []
-                    for node in gltf.nodes:
-                        node_dict = {}
-                        if hasattr(node, 'mesh') and node.mesh is not None:
-                            node_dict['mesh'] = node.mesh
-                        if hasattr(node, 'name') and node.name:
-                            node_dict['name'] = node.name
-                        if hasattr(node, 'translation') and node.translation:
-                            node_dict['translation'] = node.translation
-                        if hasattr(node, 'rotation') and node.rotation:
-                            node_dict['rotation'] = node.rotation
-                        if hasattr(node, 'scale') and node.scale:
-                            node_dict['scale'] = node.scale
-                        if hasattr(node, 'children') and node.children:
-                            node_dict['children'] = node.children
-                        gltf_data['nodes'].append(node_dict)
-                
-                if hasattr(gltf, 'meshes') and gltf.meshes:
-                    # Convert pygltflib Mesh objects to dictionaries
-                    gltf_data['meshes'] = []
-                    for mesh in gltf.meshes:
-                        mesh_dict = {}
-                        if hasattr(mesh, 'primitives') and mesh.primitives:
-                            mesh_dict['primitives'] = []
-                            for primitive in mesh.primitives:
-                                primitive_dict = {}
-                                if hasattr(primitive, 'attributes') and primitive.attributes:
-                                    # Convert pygltflib Attributes object to dictionary
-                                    attributes_dict = {}
-                                    if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
-                                        attributes_dict['POSITION'] = primitive.attributes.POSITION
-                                    if hasattr(primitive.attributes, 'NORMAL') and primitive.attributes.NORMAL is not None:
-                                        attributes_dict['NORMAL'] = primitive.attributes.NORMAL
-                                    if hasattr(primitive.attributes, 'TEXCOORD_0') and primitive.attributes.TEXCOORD_0 is not None:
-                                        attributes_dict['TEXCOORD_0'] = primitive.attributes.TEXCOORD_0
-                                    if hasattr(primitive.attributes, 'TANGENT') and primitive.attributes.TANGENT is not None:
-                                        attributes_dict['TANGENT'] = primitive.attributes.TANGENT
-                                    primitive_dict['attributes'] = attributes_dict
-                                if hasattr(primitive, 'indices') and primitive.indices is not None:
-                                    primitive_dict['indices'] = primitive.indices
-                                if hasattr(primitive, 'material') and primitive.material is not None:
-                                    primitive_dict['material'] = primitive.material
-                                if hasattr(primitive, 'mode') and primitive.mode is not None:
-                                    primitive_dict['mode'] = primitive.mode
-                                mesh_dict['primitives'].append(primitive_dict)
-                        if hasattr(mesh, 'name') and mesh.name:
-                            mesh_dict['name'] = mesh.name
-                        gltf_data['meshes'].append(mesh_dict)
-                
-                if hasattr(gltf, 'materials') and gltf.materials:
-                    # Convert pygltflib Material objects to dictionaries
-                    gltf_data['materials'] = []
-                    for material in gltf.materials:
-                        material_dict = {}
-                        if hasattr(material, 'name') and material.name:
-                            material_dict['name'] = material.name
-                        if hasattr(material, 'pbrMetallicRoughness') and material.pbrMetallicRoughness:
-                            pbr = material.pbrMetallicRoughness
-                            material_dict['pbrMetallicRoughness'] = {}
-                            if hasattr(pbr, 'baseColorFactor') and pbr.baseColorFactor:
-                                material_dict['pbrMetallicRoughness']['baseColorFactor'] = pbr.baseColorFactor
-                            if hasattr(pbr, 'metallicFactor') and pbr.metallicFactor is not None:
-                                material_dict['pbrMetallicRoughness']['metallicFactor'] = pbr.metallicFactor
-                            if hasattr(pbr, 'roughnessFactor') and pbr.roughnessFactor is not None:
-                                material_dict['pbrMetallicRoughness']['roughnessFactor'] = pbr.roughnessFactor
-                            if hasattr(pbr, 'baseColorTexture') and pbr.baseColorTexture:
-                                material_dict['pbrMetallicRoughness']['baseColorTexture'] = {'index': pbr.baseColorTexture.index}
-                        if hasattr(material, 'doubleSided') and material.doubleSided is not None:
-                            material_dict['doubleSided'] = material.doubleSided
-                        gltf_data['materials'].append(material_dict)
-                
-                if hasattr(gltf, 'textures') and gltf.textures:
-                    # Convert pygltflib Texture objects to dictionaries
-                    gltf_data['textures'] = []
-                    for texture in gltf.textures:
-                        texture_dict = {}
-                        if hasattr(texture, 'source') and texture.source is not None:
-                            texture_dict['source'] = texture.source
-                        if hasattr(texture, 'sampler') and texture.sampler is not None:
-                            texture_dict['sampler'] = texture.sampler
-                        gltf_data['textures'].append(texture_dict)
-                
-                if hasattr(gltf, 'samplers') and gltf.samplers:
-                    # Convert pygltflib Sampler objects to dictionaries
-                    gltf_data['samplers'] = []
-                    for sampler in gltf.samplers:
-                        sampler_dict = {}
-                        if hasattr(sampler, 'magFilter') and sampler.magFilter is not None:
-                            sampler_dict['magFilter'] = sampler.magFilter
-                        if hasattr(sampler, 'minFilter') and sampler.minFilter is not None:
-                            sampler_dict['minFilter'] = sampler.minFilter
-                        if hasattr(sampler, 'wrapS') and sampler.wrapS is not None:
-                            sampler_dict['wrapS'] = sampler.wrapS
-                        if hasattr(sampler, 'wrapT') and sampler.wrapT is not None:
-                            sampler_dict['wrapT'] = sampler.wrapT
-                        gltf_data['samplers'].append(sampler_dict)
-                
-                if hasattr(gltf, 'images') and gltf.images:
-                    # Convert pygltflib Image objects to dictionaries
-                    gltf_data['images'] = []
-                    for image in gltf.images:
-                        image_dict = {}
-                        if hasattr(image, 'uri') and image.uri:
-                            image_dict['uri'] = image.uri
-                        if hasattr(image, 'mimeType') and image.mimeType:
-                            image_dict['mimeType'] = image.mimeType
-                        if hasattr(image, 'bufferView') and image.bufferView is not None:
-                            image_dict['bufferView'] = image.bufferView
-                        if hasattr(image, 'name') and image.name:
-                            image_dict['name'] = image.name
-                        gltf_data['images'].append(image_dict)
-                
-                if hasattr(gltf, 'accessors') and gltf.accessors:
-                    # Convert pygltflib Accessor objects to dictionaries
-                    gltf_data['accessors'] = []
-                    for accessor in gltf.accessors:
-                        accessor_dict = {}
-                        if hasattr(accessor, 'bufferView') and accessor.bufferView is not None:
-                            accessor_dict['bufferView'] = accessor.bufferView
-                        if hasattr(accessor, 'componentType') and accessor.componentType is not None:
-                            accessor_dict['componentType'] = accessor.componentType
-                        if hasattr(accessor, 'count') and accessor.count is not None:
-                            accessor_dict['count'] = accessor.count
-                        if hasattr(accessor, 'type') and accessor.type:
-                            accessor_dict['type'] = accessor.type
-                        if hasattr(accessor, 'max') and accessor.max:
-                            accessor_dict['max'] = accessor.max
-                        if hasattr(accessor, 'min') and accessor.min:
-                            accessor_dict['min'] = accessor.min
-                        gltf_data['accessors'].append(accessor_dict)
-                
-                if hasattr(gltf, 'bufferViews') and gltf.bufferViews:
-                    # Convert pygltflib BufferView objects to dictionaries
-                    gltf_data['bufferViews'] = []
-                    for buffer_view in gltf.bufferViews:
-                        buffer_view_dict = {}
-                        if hasattr(buffer_view, 'buffer') and buffer_view.buffer is not None:
-                            buffer_view_dict['buffer'] = buffer_view.buffer
-                        if hasattr(buffer_view, 'byteOffset') and buffer_view.byteOffset is not None:
-                            buffer_view_dict['byteOffset'] = buffer_view.byteOffset
-                        if hasattr(buffer_view, 'byteLength') and buffer_view.byteLength is not None:
-                            buffer_view_dict['byteLength'] = buffer_view.byteLength
-                        if hasattr(buffer_view, 'byteStride') and buffer_view.byteStride is not None:
-                            buffer_view_dict['byteStride'] = buffer_view.byteStride
-                        if hasattr(buffer_view, 'target') and buffer_view.target is not None:
-                            buffer_view_dict['target'] = buffer_view.target
-                        gltf_data['bufferViews'].append(buffer_view_dict)
-                
-                if hasattr(gltf, 'buffers') and gltf.buffers:
-                    # Convert pygltflib Buffer objects to dictionaries
-                    gltf_data['buffers'] = []
-                    for buffer in gltf.buffers:
-                        buffer_dict = {}
-                        if hasattr(buffer, 'uri') and buffer.uri:
-                            buffer_dict['uri'] = buffer.uri
-                        if hasattr(buffer, 'byteLength') and buffer.byteLength is not None:
-                            buffer_dict['byteLength'] = buffer.byteLength
-                        gltf_data['buffers'].append(buffer_dict)
-                
-                if hasattr(gltf, 'animations') and gltf.animations:
-                    # Convert pygltflib Animation objects to dictionaries
-                    gltf_data['animations'] = []
-                    for animation in gltf.animations:
-                        animation_dict = {}
-                        if hasattr(animation, 'name') and animation.name:
-                            animation_dict['name'] = animation.name
-                        if hasattr(animation, 'samplers') and animation.samplers:
-                            # Convert AnimationSampler objects to dictionaries
-                            samplers_list = []
-                            for sampler in animation.samplers:
-                                sampler_dict = {}
-                                if hasattr(sampler, 'input') and sampler.input is not None:
-                                    sampler_dict['input'] = sampler.input
-                                if hasattr(sampler, 'output') and sampler.output is not None:
-                                    sampler_dict['output'] = sampler.output
-                                if hasattr(sampler, 'interpolation') and sampler.interpolation:
-                                    sampler_dict['interpolation'] = sampler.interpolation
-                                samplers_list.append(sampler_dict)
-                            animation_dict['samplers'] = samplers_list
-                        if hasattr(animation, 'channels') and animation.channels:
-                            # Convert AnimationChannel objects to dictionaries
-                            channels_list = []
-                            for channel in animation.channels:
-                                channel_dict = {}
-                                if hasattr(channel, 'sampler') and channel.sampler is not None:
-                                    channel_dict['sampler'] = channel.sampler
-                                if hasattr(channel, 'target') and channel.target:
-                                    target_dict = {}
-                                    if hasattr(channel.target, 'node') and channel.target.node is not None:
-                                        target_dict['node'] = channel.target.node
-                                    if hasattr(channel.target, 'path') and channel.target.path:
-                                        target_dict['path'] = channel.target.path
-                                    channel_dict['target'] = target_dict
-                                channels_list.append(channel_dict)
-                            animation_dict['channels'] = channels_list
-                        gltf_data['animations'].append(animation_dict)
-                
-                if hasattr(gltf, 'skins') and gltf.skins:
-                    # Convert pygltflib Skin objects to dictionaries
-                    gltf_data['skins'] = []
-                    for skin in gltf.skins:
-                        skin_dict = {}
-                        if hasattr(skin, 'name') and skin.name:
-                            skin_dict['name'] = skin.name
-                        if hasattr(skin, 'inverseBindMatrices') and skin.inverseBindMatrices is not None:
-                            skin_dict['inverseBindMatrices'] = skin.inverseBindMatrices
-                        if hasattr(skin, 'skeleton') and skin.skeleton is not None:
-                            skin_dict['skeleton'] = skin.skeleton
-                        if hasattr(skin, 'joints') and skin.joints:
-                            skin_dict['joints'] = skin.joints
-                        gltf_data['skins'].append(skin_dict)
-                
-                if hasattr(gltf, 'cameras') and gltf.cameras:
-                    gltf_data['cameras'] = gltf.cameras
-                
-                if hasattr(gltf, 'lights') and gltf.lights:
-                    gltf_data['lights'] = gltf.lights
-                
-                print(f"✅ Successfully extracted GLB data using pygltflib")
-                print(f"📊 Components found: {list(gltf_data.keys())}")
+                print(f"🔍 [DEBUG] GLTF data conversion complete. Keys: {list(gltf_data.keys())}")
                 
                 # Extract binary data for potential re-embedding
                 if hasattr(gltf, '_glb_data') and gltf._glb_data:
+                    print(f"🔍 [DEBUG] GLB contains binary data, extracting...")
                     self._extracted_binary_data = self._extract_binary_data(gltf, gltf_data)
-                    print(f"📦 Extracted {len(self._extracted_binary_data)} binary buffers")
+                    print(f"🔍 [DEBUG] Extracted {len(self._extracted_binary_data)} binary buffers")
                     
                     # Update buffer references to point to external binary file
                     if 'buffers' in gltf_data and gltf_data['buffers']:
+                        print(f"🔍 [DEBUG] Processing buffer references...")
                         # Create a single external binary file with unique name
                         binary_filename = f"{output_path.stem}.bin"
                         binary_path = output_path.parent / binary_filename
@@ -396,28 +189,42 @@ class VoxBridgeConverter:
                         total_size = 0
                         buffer_view_offsets = {}
                         
+                        print(f"🔍 [DEBUG] Calculating buffer view offsets...")
                         # First pass: calculate total size and new offsets
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
                             if f'bufferView_{i}' in self._extracted_binary_data:
                                 buffer_view_offsets[i] = total_size
                                 total_size += len(self._extracted_binary_data[f'bufferView_{i}'])
+                                print(f"🔍 [DEBUG] BufferView {i}: size {len(self._extracted_binary_data[f'bufferView_{i}']):,}, offset {total_size:,}")
+                        
+                        print(f"🔍 [DEBUG] Total binary size: {total_size:,} bytes")
                         
                         # Write the combined binary data
+                        print(f"🔍 [DEBUG] Writing combined binary file...")
                         with open(binary_path, 'wb') as f:
                             for i, buffer_view in enumerate(gltf_data['bufferViews']):
                                 if f'bufferView_{i}' in self._extracted_binary_data:
                                     f.write(self._extracted_binary_data[f'bufferView_{i}'])
                         
                         # Update buffer views with new offsets and byteLength
+                        print(f"🔍 [DEBUG] Updating buffer view offsets and lengths...")
                         current_offset = 0
+                        valid_buffer_views = []
+                        
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
-                            if i in buffer_view_offsets:
+                            if f'bufferView_{i}' in self._extracted_binary_data:
+                                # Update this buffer view with correct offset and length
                                 buffer_view['byteOffset'] = current_offset
-                                # CRITICAL: Update byteLength to match the actual extracted data
-                                if f'bufferView_{i}' in self._extracted_binary_data:
-                                    buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
-                                    current_offset += buffer_view['byteLength']
-                                    print(f"📏 BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes, offset: {buffer_view['byteOffset']:,}")
+                                buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
+                                print(f"🔍 [DEBUG] BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes, offset: {buffer_view['byteOffset']:,}")
+                                current_offset += buffer_view['byteLength']
+                                valid_buffer_views.append(buffer_view)
+                            else:
+                                print(f"⚠️  BufferView {i}: No extracted data, skipping to prevent gaps")
+                        
+                        # Replace buffer views with only valid ones to prevent gaps
+                        gltf_data['bufferViews'] = valid_buffer_views
+                        print(f"🔍 [DEBUG] Final buffer views count: {len(gltf_data['bufferViews'])}")
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -432,8 +239,10 @@ class VoxBridgeConverter:
                         print(f"📁 Created external binary file: {binary_filename} ({total_size:,} bytes)")
                 
                 # CRITICAL: Fix accessor byteLength calculations to prevent Error 23
+                print(f"🔍 [DEBUG] Starting accessor byteLength fixes...")
                 self._fix_accessor_byte_lengths(gltf_data)
                 
+                print(f"🔍 [DEBUG] GLB processing complete")
                 return gltf_data, ["GLB file processed successfully using pygltflib"]
                 
             except ImportError:
@@ -1198,18 +1007,42 @@ class VoxBridgeConverter:
 
     def _extract_binary_data(self, gltf, gltf_data: Dict) -> Dict[str, bytes]:
         """Extract binary buffer data from GLTF2 object"""
+        print(f"🔍 [DEBUG] Starting binary data extraction...")
         binary_data = {}
         
         if hasattr(gltf, '_glb_data') and gltf._glb_data and hasattr(gltf, 'bufferViews') and gltf.bufferViews:
+            print(f"🔍 [DEBUG] GLB contains binary data: {len(gltf._glb_data):,} bytes")
+            print(f"🔍 [DEBUG] Found {len(gltf.bufferViews)} buffer views")
+            
             # Extract data from each buffer view
             for i, buffer_view in enumerate(gltf.bufferViews):
+                print(f"🔍 [DEBUG] Processing buffer view {i}: {buffer_view}")
+                
                 if hasattr(buffer_view, 'byteOffset') and hasattr(buffer_view, 'byteLength'):
                     start = buffer_view.byteOffset
                     end = start + buffer_view.byteLength
+                    print(f"🔍 [DEBUG] Buffer view {i}: offset {start}, length {buffer_view.byteLength}, end {end}")
+                    
                     if start < len(gltf._glb_data) and end <= len(gltf._glb_data):
-                        binary_data[f'bufferView_{i}'] = gltf._glb_data[start:end]
-                        print(f"📦 Extracted buffer view {i}: {len(gltf._glb_data[start:end])} bytes")
+                        extracted_data = gltf._glb_data[start:end]
+                        binary_data[f'bufferView_{i}'] = extracted_data
+                        print(f"📦 Extracted buffer view {i}: {len(extracted_data)} bytes")
+                    else:
+                        print(f"❌ [DEBUG] Buffer view {i}: Invalid range - start {start}, end {end}, data size {len(gltf._glb_data)}")
+                else:
+                    print(f"⚠️ [DEBUG] Buffer view {i}: Missing byteOffset or byteLength attributes")
+        else:
+            print(f"🔍 [DEBUG] No binary data found in GLB")
+            if not hasattr(gltf, '_glb_data'):
+                print(f"🔍 [DEBUG] GLB missing _glb_data attribute")
+            if not gltf._glb_data:
+                print(f"🔍 [DEBUG] GLB _glb_data is empty")
+            if not hasattr(gltf, 'bufferViews'):
+                print(f"🔍 [DEBUG] GLB missing bufferViews attribute")
+            if not gltf.bufferViews:
+                print(f"🔍 [DEBUG] GLB bufferViews is empty")
         
+        print(f"🔍 [DEBUG] Binary data extraction complete. Extracted {len(binary_data)} buffer views")
         return binary_data
 
     def _embed_binary_data(self, gltf_data: Dict, binary_data: Dict[str, bytes]) -> Dict:
@@ -1522,57 +1355,51 @@ class VoxBridgeConverter:
     def _fix_accessor_byte_lengths(self, gltf_data: Dict):
         """Fix accessor byteLength calculations to prevent Error 23 validation issues"""
         if 'accessors' not in gltf_data or 'bufferViews' not in gltf_data:
+            print(f"🔍 [DEBUG] Missing accessors or bufferViews in GLTF data")
             return
         
-        print("🔧 Fixing accessor byteLength calculations to prevent Error 23...")
+        print(f"🔍 [DEBUG] Starting accessor byteLength fixes...")
+        print(f"🔍 [DEBUG] Total accessors: {len(gltf_data['accessors'])}")
+        print(f"🔍 [DEBUG] Total bufferViews: {len(gltf_data['bufferViews'])}")
         
         # CRITICAL FIX: Don't redistribute accessors - just ensure they fit in their assigned buffer views
         # The original buffer view assignments are correct and should be preserved
         
         for i, accessor in enumerate(gltf_data['accessors']):
+            print(f"🔍 [DEBUG] Processing accessor {i}: {accessor}")
+            
             if 'bufferView' in accessor and accessor['bufferView'] is not None:
                 buffer_view_index = accessor['bufferView']
+                print(f"🔍 [DEBUG] Accessor {i} references bufferView {buffer_view_index}")
+                
                 if buffer_view_index < len(gltf_data['bufferViews']):
                     buffer_view = gltf_data['bufferViews'][buffer_view_index]
-                    buffer_view_size = buffer_view.get('byteLength', 0)
+                    print(f"🔍 [DEBUG] BufferView {buffer_view_index}: {buffer_view}")
                     
-                    # Calculate how many elements can actually fit in this buffer view
+                    # Calculate required bytes for this accessor
                     component_count = self._get_type_component_count(accessor.get('type', 'SCALAR'))
                     component_size = self._get_component_size(accessor.get('componentType', 5126))
                     bytes_per_element = component_count * component_size
+                    total_bytes_needed = accessor.get('count', 0) * bytes_per_element
                     
-                    if bytes_per_element > 0:
-                        # Calculate total bytes needed for this accessor
-                        total_bytes_needed = accessor.get('count', 0) * bytes_per_element
-                        max_elements = buffer_view_size // bytes_per_element
-                        
-                        print(f"🔍 Accessor {i}: Type={accessor.get('type')}, ComponentType={accessor.get('componentType')}, Count={accessor.get('count', 0)}, BufferView={buffer_view_index}, BufferSize={buffer_view_size:,}, BytesPerElement={bytes_per_element}, TotalBytesNeeded={total_bytes_needed:,}, MaxElements={max_elements}")
-                        
-                        # Check if total bytes needed exceed buffer view size
-                        if total_bytes_needed > buffer_view_size:
-                            print(f"🔄 Accessor {i}: Total bytes needed ({total_bytes_needed:,}) exceeds BufferView {buffer_view_index} size ({buffer_view_size:,})")
-                            # Reduce count to fit
-                            forced_count = buffer_view_size // bytes_per_element
-                            if forced_count > 0:
-                                print(f"🔄 Accessor {i}: Reducing count from {accessor.get('count', 0)} to {forced_count} to prevent Error 23")
-                                accessor['count'] = forced_count
-                                print(f"✅ Accessor {i}: Final count set to {accessor['count']}")
-                        else:
-                            print(f"ℹ️  Accessor {i}: Count {accessor.get('count', 0)} fits in BufferView {buffer_view_index} (total bytes: {total_bytes_needed:,})")
-                        
-                        # Verify the final calculation
-                        final_bytes = accessor['count'] * bytes_per_element
-                        if final_bytes > buffer_view_size:
-                            print(f"⚠️  Accessor {i}: Still too large ({final_bytes:,} bytes) for BufferView {buffer_view_index} ({buffer_view_size:,} bytes)")
-                            # Force the count to fit
-                            forced_count = buffer_view_size // bytes_per_element
-                            if forced_count > 0:
-                                accessor['count'] = forced_count
-                                print(f"🔄 Accessor {i}: Final forced count: {accessor['count']}")
-                            else:
-                                print(f"❌ Accessor {i}: Cannot fit even 1 element in BufferView {buffer_view_index}")
+                    print(f"🔍 [DEBUG] Accessor {i}: Type={accessor.get('type', 'SCALAR')}, ComponentType={accessor.get('componentType', 5126)}, Count={accessor.get('count', 0)}")
+                    print(f"🔍 [DEBUG] Accessor {i}: ComponentCount={component_count}, ComponentSize={component_size}, BytesPerElement={bytes_per_element}")
+                    print(f"🔍 [DEBUG] Accessor {i}: TotalBytesNeeded={total_bytes_needed}, BufferViewSize={buffer_view.get('byteLength', 0)}")
+                    
+                    if total_bytes_needed > buffer_view.get('byteLength', 0):
+                        print(f"⚠️ [DEBUG] Accessor {i}: Count {accessor.get('count', 0)} exceeds BufferView {buffer_view_index} byteLength {buffer_view.get('byteLength', 0)}")
+                        # Adjust count to fit in buffer view
+                        max_elements = buffer_view.get('byteLength', 0) // bytes_per_element
+                        print(f"🔍 [DEBUG] Accessor {i}: Adjusting count from {accessor.get('count', 0)} to {max_elements}")
+                        accessor['count'] = max_elements
+                    else:
+                        print(f"ℹ️ [DEBUG] Accessor {i}: Count {accessor.get('count', 0)} fits in BufferView {buffer_view_index} (total bytes: {total_bytes_needed})")
+                else:
+                    print(f"❌ [DEBUG] Accessor {i}: Invalid bufferView index {buffer_view_index} (max: {len(gltf_data['bufferViews'])-1})")
+            else:
+                print(f"⚠️ [DEBUG] Accessor {i}: No bufferView reference found")
         
-        print("✅ Accessor count adjustments complete")
+        print(f"✅ [DEBUG] Accessor count adjustments complete")
     
     def _get_type_component_count(self, accessor_type: str) -> int:
         """Get the number of components for an accessor type"""
