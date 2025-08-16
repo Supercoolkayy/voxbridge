@@ -44,7 +44,7 @@ console = Console(emoji=False, width=80)
 
 def print_header(verbose: bool = False):
     """Print the VoxBridge header with box-drawing characters."""
-    if verbose:
+            if verbose:
         title = "VoxBridge Converter v1.0.3 (Verbose Mode)"
     else:
         title = "VoxBridge Converter v1.0.3"
@@ -133,7 +133,7 @@ def print_conversion_summary(converter: VoxBridgeConverter, output_path: Path, v
             else:
                 size_str = f"{size_kb:.0f} KB"
             size_str += " (ZIP)"
-        else:
+                else:
             # Use the stored file size from conversion stats
             stored_size = stats.get('file_size', 0)
             if stored_size > 0:
@@ -177,10 +177,10 @@ Status: {status}
     console.print(footer, style=style)
 
 def handle_conversion(
-    input_path: Path,
-    output_path: Path,
+    input_path: Path, 
+    output_path: Path, 
     target: str,
-    optimize_mesh: bool = False,
+    optimize_mesh: bool = False, 
     no_blender: bool = False,
     verbose: bool = False,
     debug: bool = False
@@ -226,13 +226,13 @@ def handle_conversion(
         
         # Show progress bar for file processing
         if RICH_AVAILABLE and not verbose:
-            with Progress(
+                with Progress(
                 SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+                    TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
-                TimeElapsedColumn(),
-                console=console
-            ) as progress:
+                    TimeElapsedColumn(),
+                    console=console
+                ) as progress:
                 task = progress.add_task("Processing GLB file...", total=100)
                 
                 # Simulate progress updates
@@ -261,8 +261,8 @@ def handle_conversion(
         
         if not result:
             print_step_info("Conversion failed", 1)
-            return False
-        
+                    return False
+                
         # Check if we got a ZIP file back from the converter
         final_output_path = output_path
         if hasattr(converter, '_last_conversion_stats') and converter._last_conversion_stats:
@@ -287,7 +287,7 @@ def handle_conversion(
         print_step_info("BIN file created", 1)
         if final_output_path.suffix.lower() == '.zip':
             print_step_info(f"GLTF written: {final_output_path.stem}.gltf (packaged in {final_output_path.name})", 1)
-        else:
+            else:
             print_step_info(f"GLTF written: {final_output_path.name}", 1)
         
         # Step 3: Validation (placeholder for now)
@@ -347,7 +347,7 @@ def convert(
     # Check if input file exists
     if not input_file.exists():
         console.print(f"[bold red]Error: Input file '{input_file}' does not exist")
-        raise typer.Exit(1)
+            raise typer.Exit(1)
     
     # Check if input file is a GLB file
     if input_file.suffix.lower() != '.glb':
@@ -476,14 +476,14 @@ def doctor():
         result = subprocess.run(['which', 'node'], capture_output=True, text=True)
         if result.returncode == 0:
             console.print(f"  ✓ Node.js: {result.stdout.strip()}")
-        else:
+            else:
             console.print("  ✗ Node.js: not found")
     except:
         console.print("  ✗ Node.js: detection failed")
 
 def main():
     """Main entry point for the CLI."""
-    app()
+        app()
 
 if __name__ == "__main__":
     main() 

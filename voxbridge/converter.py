@@ -1898,7 +1898,7 @@ class VoxBridgeConverter:
             'MAT4': 16,
         }
         return type_components.get(type_name, 1)
-    
+
     def _extract_binary_data(self, gltf, gltf_data: Dict) -> Dict[str, bytes]:
         """Extract binary buffer data from GLTF2 object"""
         binary_data = {}
@@ -2233,11 +2233,11 @@ class VoxBridgeConverter:
             else:
                 if self.debug:
                     print("Validation failed!")
-                    print("Validation output:")
-                    print(result.stdout)
-                    if result.stderr:
-                        print("Validation errors:")
-                        print(result.stderr)
+                print("Validation output:")
+                print(result.stdout)
+                if result.stderr:
+                    print("Validation errors:")
+                    print(result.stderr)
                 return False
                 
         except Exception as e:

@@ -73,18 +73,21 @@ class VoxBridgeGUI:
         subtitle_label.grid(row=1, column=0, columnspan=3, pady=(0, 20))
         
         # Input file selection
-        ttk.Label(main_frame, text="Input File:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Input Files:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.input_var = tk.StringVar()
         input_entry = ttk.Entry(main_frame, textvariable=self.input_var, width=50)
         input_entry.grid(row=2, column=1, sticky="ew", padx=(5, 5), pady=5)
-        ttk.Button(main_frame, text="Browse", command=self.browse_input).grid(row=2, column=2, pady=5)
+        input_buttons_frame = ttk.Frame(main_frame)
+        input_buttons_frame.grid(row=2, column=2, pady=5)
+        ttk.Button(input_buttons_frame, text="Single File", command=self.browse_input).pack(side=tk.TOP, pady=2)
+        ttk.Button(input_buttons_frame, text="Batch Files", command=self.browse_batch_input).pack(side=tk.TOP, pady=2)
         
-        # Output file selection
-        ttk.Label(main_frame, text="Output File:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        # Output folder selection
+        ttk.Label(main_frame, text="Output Folder:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.output_var = tk.StringVar()
         output_entry = ttk.Entry(main_frame, textvariable=self.output_var, width=50)
         output_entry.grid(row=3, column=1, sticky="ew", padx=(5, 5), pady=5)
-        ttk.Button(main_frame, text="Browse", command=self.browse_output).grid(row=3, column=2, pady=5)
+        ttk.Button(main_frame, text="Browse", command=self.browse_output_folder).grid(row=3, column=2, pady=5)
         
         # Target platform
         ttk.Label(main_frame, text="Target Platform:").grid(row=4, column=0, sticky=tk.W, pady=5)
@@ -170,7 +173,7 @@ class VoxBridgeGUI:
             self.output_var.set(str(output_path))
     
     def browse_output(self):
-        """Browse for output file"""
+        """Browse for output file (legacy method)"""
         filetypes = [
             ("glTF files", "*.gltf"),
             ("GLB files", "*.glb"),
@@ -183,6 +186,35 @@ class VoxBridgeGUI:
         )
         if filename:
             self.output_var.set(filename)
+    
+    def browse_batch_input(self):
+        """Browse for multiple input files"""
+        filetypes = [
+            ("GLB files", "*.glb"),
+            ("glTF files", "*.gltf"),
+            ("All files", "*.*")
+        ]
+        filenames = filedialog.askopenfilenames(
+            title="Select Input Files (Batch Mode)",
+            filetypes=filetypes
+        )
+        if filenames:
+            # Join multiple files with semicolon for display
+            self.input_var.set("; ".join(filenames))
+            # Auto-generate output folder name
+            if len(filenames) > 1:
+                input_dir = Path(filenames[0]).parent
+                target = self.target_var.get()
+                output_folder = input_dir / f"voxbridge_output_{target}"
+                self.output_var.set(str(output_folder))
+    
+    def browse_output_folder(self):
+        """Browse for output folder"""
+        folder = filedialog.askdirectory(
+            title="Select Output Folder"
+        )
+        if folder:
+            self.output_var.set(folder)
     
     def log_message(self, message: str, level: str = "info"):
         """Add message to log"""
@@ -226,26 +258,52 @@ class VoxBridgeGUI:
     
     def validate_inputs(self) -> bool:
         """Validate user inputs"""
-        input_file = self.input_var.get().strip()
-        output_file = self.output_var.get().strip()
+        input_files_str = self.input_var.get().strip()
+        output_folder = self.output_var.get().strip()
         target = self.target_var.get()
         
-        if not input_file:
-            messagebox.showerror("Error", "Please select an input file.")
+        if not input_files_str:
+            messagebox.showerror("Error", "Please select input file(s).")
             return False
         
-        if not output_file:
-            messagebox.showerror("Error", "Please specify an output file.")
+        if not output_folder:
+            messagebox.showerror("Error", "Please specify an output folder.")
             return False
         
-        input_path = Path(input_file)
-        if not input_path.exists():
-            messagebox.showerror("Error", f"Input file does not exist: {input_file}")
-            return False
+        # Parse input files (support both single and batch)
+        if ";" in input_files_str:
+            # Batch mode - multiple files separated by semicolon
+            input_files = [Path(f.strip()) for f in input_files_str.split(";")]
+        else:
+            # Single file mode
+            input_files = [Path(input_files_str)]
+        
+        # Validate each input file
+        for input_path in input_files:
+            if not input_path.exists():
+                messagebox.showerror("Error", f"Input file does not exist: {input_path}")
+                return False
+            if input_path.suffix.lower() not in ['.glb', '.gltf']:
+                messagebox.showerror("Error", f"Input file must be .glb or .gltf: {input_path}")
+                return False
+        
+        # Validate output folder
+        output_path = Path(output_folder)
+        if not output_path.exists():
+            # Try to create the folder
+            try:
+                output_path.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                messagebox.showerror("Error", f"Cannot create output folder: {e}")
+                return False
         
         if target not in ["unity", "roblox"]:
             messagebox.showerror("Error", "Target must be 'unity' or 'roblox'")
             return False
+        
+        # Store input files for conversion
+        self.input_files = input_files
+        self.output_folder = output_path
         
         return True
     
@@ -255,42 +313,75 @@ class VoxBridgeGUI:
             self.update_progress("Starting conversion...")
             self.log_message("Starting VoxBridge conversion", "info")
             
-            # Get parameters
-            input_file = Path(self.input_var.get())
-            output_file = Path(self.output_var.get())
+            # Get parameters from validation
+            input_files = getattr(self, 'input_files', [])
+            output_folder = getattr(self, 'output_folder', None)
             target = self.target_var.get()
+            
+            if not input_files or not output_folder:
+                self.log_message("Error: Input files or output folder not set", "error")
+                return
             
             # Get options
             optimize_mesh = self.optimize_mesh_var.get()
-            generate_atlas = self.generate_atlas_var.get()
-            compress_textures = self.compress_textures_var.get()
             no_blender = self.no_blender_var.get()
-            report = self.report_var.get()
             verbose = self.verbose_var.get()
             
-            self.log_message(f"Input: {input_file}", "info")
-            self.log_message(f"Output: {output_file}", "info")
+            self.log_message(f"Input files: {len(input_files)}", "info")
+            self.log_message(f"Output folder: {output_folder}", "info")
             self.log_message(f"Target: {target}", "info")
             
-            # Run conversion
+            # Run conversions
             if self.converter:
-                use_blender = not no_blender
-                success = self.converter.convert_file(
-                    input_file, output_file, use_blender,
-                    optimize_mesh=optimize_mesh,
-                    generate_atlas=generate_atlas,
-                    compress_textures=compress_textures,
-                    platform=target
-                )
+                successful_conversions = 0
+                total_files = len(input_files)
                 
-                if success:
-                    self.log_message("Conversion completed successfully!", "success")
-                    self.update_progress("Conversion completed successfully!")
-                    messagebox.showinfo("Success", f"Conversion completed successfully!\nOutput: {output_file}")
+                for i, input_file in enumerate(input_files, 1):
+                    self.update_progress(f"Converting file {i} of {total_files}: {input_file.name}")
+                    self.log_message(f"Converting {input_file.name}...", "info")
+                    
+                    # Generate output path for this file
+                    output_file = output_folder / f"{input_file.stem}_{target}"
+                    
+                    try:
+                        use_blender = not no_blender
+                        success = self.converter.convert_file(
+                            input_file, output_file, use_blender,
+                            optimize_mesh=optimize_mesh,
+                            platform=target
+                        )
+                        
+                        if success:
+                            successful_conversions += 1
+                            self.log_message(f"✓ {input_file.name} converted successfully!", "success")
+                            
+                            # Check if ZIP was created
+                            zip_path = output_file.with_suffix('.zip')
+                            if zip_path.exists():
+                                self.log_message(f"  → Packaged into {zip_path.name}", "info")
+                            else:
+                                self.log_message(f"  → Output saved as {output_file.with_suffix('.gltf').name}", "info")
+                        else:
+                            self.log_message(f"✗ {input_file.name} conversion failed!", "error")
+                            
+                    except Exception as e:
+                        self.log_message(f"✗ Error converting {input_file.name}: {e}", "error")
+                
+                # Final summary
+                if successful_conversions > 0:
+                    self.update_progress(f"Conversion completed: {successful_conversions}/{total_files} files")
+                    self.log_message(f"Conversion completed: {successful_conversions}/{total_files} files successfully!", "success")
+                    
+                    # Show completion message with output folder link
+                    completion_msg = f"Conversion completed!\n\n{successful_conversions} of {total_files} files converted successfully.\n\nOutput folder: {output_folder}"
+                    if successful_conversions == total_files:
+                        messagebox.showinfo("Success", completion_msg)
+                    else:
+                        messagebox.showwarning("Partial Success", completion_msg)
                 else:
-                    self.log_message("Conversion failed!", "error")
-                    self.update_progress("Conversion failed!")
-                    messagebox.showerror("Error", "Conversion failed. Check the log for details.")
+                    self.update_progress("All conversions failed")
+                    self.log_message("All conversions failed!", "error")
+                    messagebox.showerror("Error", "All conversions failed. Check the log for details.")
             else:
                 self.log_message("VoxBridge converter not available", "error")
                 self.update_progress("Converter not available")
@@ -339,6 +430,12 @@ class VoxBridgeGUI:
         self.verbose_var.set(False)
         self.progress_var.set("Ready")
         self.log_text.delete(1.0, tk.END)
+        
+        # Clear batch processing attributes
+        if hasattr(self, 'input_files'):
+            delattr(self, 'input_files')
+        if hasattr(self, 'output_folder'):
+            delattr(self, 'output_folder')
 
 
 def run():
