@@ -645,8 +645,8 @@ class VoxBridgeConverter:
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
                 
-                print(f"✅ Created clean glTF: {output_path}")
-                print(f"📊 File size: {output_path.stat().st_size:,} bytes")
+                print(f" Created clean glTF: {output_path}")
+                print(f" File size: {output_path.stat().st_size:,} bytes")
                 print(f"💡 Note: This file references external data and is optimized for Sketchfab")
                 
                 # Generate texture atlas if requested
@@ -702,7 +702,7 @@ class VoxBridgeConverter:
                     if 'byteLength' in buffer:
                         del buffer['byteLength']
             
-            print("✅ Binary data embedded successfully")
+            print(" Binary data embedded successfully")
         else:
             print("⚠️ No binary data found in original GLB")
         
@@ -745,8 +745,8 @@ class VoxBridgeConverter:
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Created Sketchfab-optimized GLTF: {output_path}")
-            print(f"📊 File size: {output_path.stat().st_size:,} bytes")
+            print(f" Created Sketchfab-optimized GLTF: {output_path}")
+            print(f" File size: {output_path.stat().st_size:,} bytes")
             print(f"💡 This file is optimized for Sketchfab and other web platforms")
             
             # Create ZIP package for Sketchfab (like the working example)
@@ -1291,7 +1291,7 @@ For more information, visit: https://github.com/Supercoolkayy/voxbridge
                 
                 # Save as GLB
                 gltf.save(str(output_path))
-                print(f"✅ Successfully created GLB file: {output_path}")
+                print(f" Successfully created GLB file: {output_path}")
                 return True
                 
             except Exception as glb_error:
@@ -1878,7 +1878,7 @@ For more information, visit: https://github.com/Supercoolkayy/voxbridge
         
         # Overall status
         if overall_status == "PASS":
-            status_icon = "✅"
+            status_icon = ""
         elif overall_status == "WARN":
             status_icon = "⚠️"
         elif overall_status == "FAIL":
@@ -1894,7 +1894,7 @@ For more information, visit: https://github.com/Supercoolkayy/voxbridge
             print("\n📋 Validation Checks:")
             for check_name, check_status in checks.items():
                 if check_status == "PASS":
-                    print(f"  ✅ {check_name}: {check_status}")
+                    print(f"   {check_name}: {check_status}")
                 elif check_status == "WARN":
                     print(f"  ⚠️  {check_name}: {check_status}")
                 elif check_status == "FAIL":
@@ -1925,7 +1925,7 @@ For more information, visit: https://github.com/Supercoolkayy/voxbridge
         
         # Final status message
         if overall_status == "PASS":
-            print(f"\n✅ Export validation PASSED successfully!")
+            print(f"\n Export validation PASSED successfully!")
         elif overall_status == "WARN":
             print(f"\n⚠️  Export validation PASSED with warnings. Review warnings above.")
         elif overall_status == "FAIL":

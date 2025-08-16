@@ -10,6 +10,17 @@ import os
 import re
 from pathlib import Path
 
+# Check for required dependencies
+try:
+    import numpy
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    print("WARNING: numpy not available in Blender's Python environment")
+    print("This may cause conversion issues. Install numpy with:")
+    print("  /path/to/blender/2.xx/python/bin/python3.7m -m ensurepip")
+    print("  /path/to/blender/2.xx/python/bin/python3.7m -m pip install numpy")
+
 def clean_material_name(name):
     """Clean material name to be alphanumeric + underscores only"""
     # Replace non-alphanumeric characters with underscores

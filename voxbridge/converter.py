@@ -24,11 +24,12 @@ except ImportError:
 class VoxBridgeConverter:
     """Core converter class for VoxEdit glTF/glb files with platform-specific optimizations"""
     
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         self.supported_formats = ['.gltf', '.glb']
         self.blender_script_path = Path(__file__).parent / 'blender_cleanup.py'
         self._extracted_binary_data = {}
         self.last_changes = []
+        self.debug = debug
         
     def validate_input(self, input_path: Path) -> bool:
         """Validate input file exists and has correct format"""
@@ -124,14 +125,16 @@ class VoxBridgeConverter:
     def _process_glb_file(self, glb_path: Path, output_path: Path) -> Tuple[Dict, List[str]]:
         """Process GLB file to extract glTF JSON and binary data"""
         try:
-            print(f"📦 Processing GLB file: {glb_path}")
+            if self.debug:
+                print(f"Processing GLB file: {glb_path}")
             
             # Try using pygltflib first (more reliable)
             try:
                 import pygltflib
                 from pygltflib import GLTF2
                 
-                print("Using pygltflib for GLB processing...")
+                if self.debug:
+                    print("Using pygltflib for GLB processing...")
                 gltf = GLTF2.load(str(glb_path))
                 
                 # Convert to dictionary format
@@ -378,13 +381,15 @@ class VoxBridgeConverter:
                 if hasattr(gltf, 'lights') and gltf.lights:
                     gltf_data['lights'] = gltf.lights
                 
-                print(f"✅ Successfully extracted GLB data using pygltflib")
-                print(f"📊 Components found: {list(gltf_data.keys())}")
+                if self.debug:
+                    print(f"Successfully extracted GLB data using pygltflib")
+                    print(f"Components found: {list(gltf_data.keys())}")
                 
                 # Extract binary data for potential re-embedding
                 if hasattr(gltf, '_glb_data') and gltf._glb_data:
                     self._extracted_binary_data = self._extract_binary_data(gltf, gltf_data)
-                    print(f"📦 Extracted {len(self._extracted_binary_data)} binary buffers")
+                    if self.debug:
+                        print(f"Extracted {len(self._extracted_binary_data)} binary buffers")
                     
                     # Update buffer references to point to external binary file
                     if 'buffers' in gltf_data and gltf_data['buffers']:
@@ -415,7 +420,10 @@ class VoxBridgeConverter:
                                 # CRITICAL: Update byteLength to match the actual extracted data
                                 if f'bufferView_{i}' in self._extracted_binary_data:
                                     buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
-                                    print(f"📏 BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
+                                    if self.debug:
+                                        print(f"BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
+                        
+
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -427,23 +435,59 @@ class VoxBridgeConverter:
                         if len(gltf_data['buffers']) > 1:
                             gltf_data['buffers'] = [gltf_data['buffers'][0]]
                         
-                        print(f"📁 Created external binary file: {binary_filename} ({total_size:,} bytes)")
+                        if self.debug:
+                            print(f"Created external binary file: {binary_filename} ({total_size:,} bytes)")
+                
+                # Validate and fix accessor counts to prevent Error 23
+                if self.debug:
+                    print("Starting accessor count validation...")
+                if 'accessors' in gltf_data:
+                    print(f"Found {len(gltf_data['accessors'])} accessors to validate")
+                    for i, accessor in enumerate(gltf_data['accessors']):
+                        if 'bufferView' in accessor and 'count' in accessor:
+                            buffer_view_idx = accessor['bufferView']
+                            if buffer_view_idx < len(gltf_data['bufferViews']):
+                                buffer_view = gltf_data['bufferViews'][buffer_view_idx]
+                                if 'byteLength' in buffer_view:
+                                    # Calculate correct count based on component type and size
+                                    component_type_size = self._get_component_type_size(accessor.get('componentType', 5126))
+                                    type_num_components = self._get_type_num_components(accessor.get('type', 'FLOAT'))
+                                    
+                                    if self.debug:
+                                        print(f"Accessor {i}: componentType={accessor.get('componentType', 5126)}, type={accessor.get('type', 'FLOAT')}")
+                                        print(f"  component_size={component_type_size}, num_components={type_num_components}")
+                                        print(f"  buffer_view_byteLength={buffer_view['byteLength']}")
+                                    
+                                    if component_type_size > 0 and type_num_components > 0:
+                                        max_count = buffer_view['byteLength'] // (component_type_size * type_num_components)
+                                        if self.debug:
+                                            print(f"  max_count={max_count}, current_count={accessor['count']}")
+                                        if accessor['count'] > max_count:
+                                            if self.debug:
+                                                print(f"Fixing accessor {i}: count {accessor['count']} exceeds buffer capacity, reducing to {max_count}")
+                                            accessor['count'] = max_count
+                else:
+                    if self.debug:
+                        print("No accessors found in gltf_data")
                 
                 return gltf_data, ["GLB file processed successfully using pygltflib"]
                 
             except ImportError:
-                print("pygltflib not available, trying alternative method...")
+                if self.debug:
+                    print("pygltflib not available, trying alternative method...")
                 raise ImportError("pygltflib required for GLB processing")
                 
             except Exception as pygltf_error:
-                print(f"pygltflib failed: {pygltf_error}")
-                print("Trying alternative GLB processing method...")
+                if self.debug:
+                    print(f"pygltflib failed: {pygltf_error}")
+                    print("Trying alternative GLB processing method...")
                 raise RuntimeError(f"pygltflib processing failed: {pygltf_error}")
                 
         except Exception as e:
-            print(f"❌ Failed to process GLB file: {e}")
-            import traceback
-            traceback.print_exc()
+            if self.debug:
+                print(f"Failed to process GLB file: {e}")
+                import traceback
+                traceback.print_exc()
             raise RuntimeError(f"GLB processing failed: {e}")
     
     def validate_output(self, output_path: Path) -> Dict:
@@ -512,17 +556,21 @@ class VoxBridgeConverter:
         if use_blender and input_path.suffix.lower() == '.glb':
             # Try Blender first for GLB files
             try:
-                print("🎨 Attempting Blender conversion...")
+                if self.debug:
+                    print("Attempting Blender conversion...")
                 if self.convert_with_blender(input_path, output_path, optimize_mesh=optimize_mesh, platform=platform):
-                    print("✅ Blender conversion successful!")
+                    if self.debug:
+                        print("Blender conversion successful!")
                     return True
                 else:
-                    print("⚠️  Blender conversion failed, falling back to basic GLB processing...")
+                    if self.debug:
+                        print("Blender conversion failed, falling back to basic GLB processing...")
                     # Fall back to basic GLB processing
                     return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
             except Exception as e:
-                print(f"❌ Blender conversion failed with error: {e}")
-                print("🔄 Falling back to basic GLB processing...")
+                if self.debug:
+                    print(f"Blender conversion failed with error: {e}")
+                    print("Falling back to basic GLB processing...")
                 # Fall back to basic GLB processing
                 return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
         else:
@@ -533,16 +581,30 @@ class VoxBridgeConverter:
         """Convert using Blender Python script with platform-specific settings"""
         blender_exe = self.find_blender()
         if not blender_exe:
-            print("⚠️  Blender not found, using basic conversion...")
+            if self.debug:
+                print("Blender not found, using basic conversion...")
             return False
         
         if not self.blender_script_path.exists():
-            print("⚠️  Blender script not found, using basic conversion...")
+            if self.debug:
+                print("Blender script not found, using basic conversion...")
             return False
         
         # Try to install numpy in Blender's Python environment first
         try:
-            print("🔧 Attempting to install numpy in Blender's Python environment...")
+            if self.debug:
+                print("Attempting to install numpy in Blender's Python environment...")
+            
+            # First try to ensure pip is available
+            pip_check_cmd = [
+                blender_exe,
+                "--background",
+                "--python-expr",
+                "import ensurepip; ensurepip.bootstrap()"
+            ]
+            subprocess.run(pip_check_cmd, capture_output=True, text=True, timeout=30)
+            
+            # Then try to install numpy
             numpy_install_cmd = [
                 blender_exe,
                 "--background",
@@ -551,11 +613,14 @@ class VoxBridgeConverter:
             ]
             result = subprocess.run(numpy_install_cmd, capture_output=True, text=True, timeout=60)
             if result.returncode == 0:
-                print("✅ Numpy installed successfully in Blender's Python environment")
+                if self.debug:
+                    print("Numpy installed successfully in Blender's Python environment")
             else:
-                print("⚠️  Could not install numpy in Blender's Python environment")
+                if self.debug:
+                    print("Could not install numpy in Blender's Python environment")
         except Exception as e:
-            print(f"⚠️  Numpy installation attempt failed: {e}")
+            if self.debug:
+                print(f"Numpy installation attempt failed: {e}")
         
         # Run Blender in background mode with our script
         cmd = [
@@ -571,11 +636,13 @@ class VoxBridgeConverter:
             cmd.append("--optimize-mesh")
         
         try:
-            print("🎨 Running Blender conversion...")
+            if self.debug:
+                print("Running Blender conversion...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             
             if result.returncode == 0:
-                print("✅ Blender conversion successful!")
+                if self.debug:
+                    print("Blender conversion successful!")
                 return True
             else:
                 # Check for specific error patterns
@@ -583,21 +650,31 @@ class VoxBridgeConverter:
                 stdout = result.stdout or ""
                 
                 if "No module named 'numpy'" in stderr or "No module named 'numpy'" in stdout:
-                    print("⚠️  Blender numpy dependency missing. Using basic conversion...")
+                    if self.debug:
+                        print("Blender numpy dependency missing. Using basic conversion...")
+                    print("WARNING: Blender conversion unavailable, using fallback (may cause Error 23)")
+                    print("To fix this, install numpy in Blender's Python environment:")
+                    print("  /path/to/blender/2.xx/python/bin/python3.7m -m ensurepip")
+                    print("  /path/to/blender/2.xx/python/bin/python3.7m -m pip install numpy")
                     return False
                 elif "ModuleNotFoundError" in stderr or "ModuleNotFoundError" in stdout:
-                    print("⚠️  Blender Python environment missing required modules. Using basic conversion...")
+                    if self.debug:
+                        print("Blender Python environment missing required modules. Using basic conversion...")
+                    print("WARNING: Blender conversion unavailable, using fallback (may cause Error 23)")
                     return False
                 else:
-                    print(f"⚠️  Blender failed with return code {result.returncode}")
-                    print(f"Error output: {stderr[:200]}...")
+                    if self.debug:
+                        print(f"Blender failed with return code {result.returncode}")
+                        print(f"Error output: {stderr[:200]}...")
                     return False
                 
         except subprocess.TimeoutExpired:
-            print("⚠️  Blender processing timed out (120s). Using basic conversion...")
+            if self.debug:
+                print("Blender processing timed out (120s). Using basic conversion...")
             return False
         except Exception as e:
-            print(f"⚠️  Blender execution failed: {e}. Using basic conversion...")
+            if self.debug:
+                print(f"Blender execution failed: {e}. Using basic conversion...")
             return False
         
         return False  # Fallback return
@@ -628,13 +705,42 @@ class VoxBridgeConverter:
             texture_changes = self.optimize_textures_for_platform(gltf_data, platform, input_path.parent)
             self.last_changes.extend(texture_changes)
             
+            # Validate and fix accessor counts before writing the file
+            if self.debug:
+                print("Final accessor validation before writing GLTF...")
+                print(f"gltf_data keys: {list(gltf_data.keys())}")
+                if 'accessors' in gltf_data:
+                    print(f"Number of accessors: {len(gltf_data['accessors'])}")
+                    for i, accessor in enumerate(gltf_data['accessors'][:3]):  # Show first 3 accessors
+                        print(f"Accessor {i}: {accessor}")
+            if 'accessors' in gltf_data:
+                for i, accessor in enumerate(gltf_data['accessors']):
+                    if 'bufferView' in accessor and 'count' in accessor:
+                        buffer_view_idx = accessor['bufferView']
+                        if buffer_view_idx < len(gltf_data['bufferViews']):
+                            buffer_view = gltf_data['bufferViews'][buffer_view_idx]
+                            if 'byteLength' in buffer_view:
+                                # Calculate correct count based on component type and size
+                                component_type_size = self._get_component_type_size(accessor.get('componentType', 5126))
+                                type_num_components = self._get_type_num_components(accessor.get('type', 'FLOAT'))
+                                
+                                if component_type_size > 0 and type_num_components > 0:
+                                    max_count = buffer_view['byteLength'] // (component_type_size * type_num_components)
+                                    if accessor['count'] > max_count:
+                                        if self.debug:
+                                            print(f"Final fix: accessor {i}: count {accessor['count']} -> {max_count}")
+                                        accessor['count'] = max_count
+                                        if self.debug:
+                                            print(f"Updated accessor {i} count to {accessor['count']}")
+            
             # Skip GLB conversion entirely - go straight to GLTF output
             # This prevents unnecessary .glb files and ensures clean output
             gltf_output = output_path.with_suffix('.gltf')
             with open(gltf_output, 'w', encoding='utf-8') as f:
                 json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Saved as GLTF: {gltf_output}")
+            if self.debug:
+                print(f"Saved as GLTF: {gltf_output}")
             
             # Run automatic validation
             self._run_validation(gltf_output)
@@ -642,9 +748,10 @@ class VoxBridgeConverter:
             return True
                 
         except Exception as e:
-            print(f"❌ Failed to convert file: {e}")
-            import traceback
-            traceback.print_exc()
+            if self.debug:
+                print(f"Failed to convert file: {e}")
+                import traceback
+                traceback.print_exc()
             return False
 
     def optimize_meshes_for_platform(self, gltf_data: Dict, platform: str) -> List[str]:
@@ -892,14 +999,16 @@ class VoxBridgeConverter:
                 for file_path, zip_name in files_to_zip:
                     zipf.write(file_path, zip_name)
             
-            print(f"📦 Created {platform} package: {zip_path}")
-            print(f"📁 Files included: {[name for _, name in files_to_zip]}")
-            print(f"💡 This package is ready for {platform}")
+            if self.debug:
+                print(f"Created {platform} package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+                print(f"This package is ready for {platform}")
             
             return True
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create {platform} package: {e}")
+            if self.debug:
+                print(f"Warning: Could not create {platform} package: {e}")
             return False
     
     def _get_platform_notes(self, platform: str) -> str:
@@ -1034,30 +1143,36 @@ class VoxBridgeConverter:
                 
                 f.write("\nFor more information, visit: https://github.com/Supercoolkayy/voxbridge\n")
             
-            print(f"📁 Created output structure in: {output_path.parent}")
-            print(f"📖 Added README.txt with {platform} usage instructions")
+            if self.debug:
+                print(f"Created output structure in: {output_path.parent}")
+                print(f"Added README.txt with {platform} usage instructions")
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create complete output structure: {e}")
+            if self.debug:
+                print(f"Warning: Could not create complete output structure: {e}")
 
     def _create_embedded_gltf(self, original_gltf, gltf_data: Dict) -> Dict:
         """Create glTF with embedded binary data using Data URLs (use sparingly)"""
         import base64
         
-        print("⚠️ WARNING: Creating embedded GLTF with base64 data (may cause large file sizes)")
-        print("💡 Consider using clean GLTF for better compatibility with platforms like Sketchfab")
-        print("Embedding binary data into glTF...")
+        if self.debug:
+            print("WARNING: Creating embedded GLTF with base64 data (may cause large file sizes)")
+            print("Consider using clean GLTF for better compatibility with platforms like Sketchfab")
+        if self.debug:
+            print("Embedding binary data into glTF...")
         
         # Get the binary data from the original GLB
         if hasattr(original_gltf, '_glb_data') and original_gltf._glb_data:
             binary_data = original_gltf._glb_data
-            print(f"Found binary data: {len(binary_data):,} bytes")
+            if self.debug:
+                print(f"Found binary data: {len(binary_data):,} bytes")
             
-            # Check file size warning
-            if len(binary_data) > 1024 * 1024:  # 1MB
-                print(f"⚠️ WARNING: Binary data is {len(binary_data) / (1024*1024):.1f}MB")
-                print(f"⚠️ This will create a very large embedded file that may cause issues")
-                print(f"💡 Consider using clean GLTF instead")
+                    # Check file size warning
+        if len(binary_data) > 1024 * 1024:  # 1MB
+            if self.debug:
+                print(f"WARNING: Binary data is {len(binary_data) / (1024*1024):.1f}MB")
+                print(f"This will create a very large embedded file that may cause issues")
+                print(f"Consider using clean GLTF instead")
             
             # Convert binary data to base64 Data URL
             base64_data = base64.b64encode(binary_data).decode('ascii')
@@ -1071,16 +1186,19 @@ class VoxBridgeConverter:
                     if 'byteLength' in buffer:
                         del buffer['byteLength']
             
-            print("✅ Binary data embedded successfully")
+                    if self.debug:
+                        print("Binary data embedded successfully")
         else:
-            print("⚠️ No binary data found in original GLB")
+            if self.debug:
+                print("No binary data found in original GLB")
         
         return gltf_data
 
     def create_sketchfab_gltf(self, input_path: Path, output_path: Path) -> bool:
         """Create a clean GLTF file optimized for Sketchfab (no embedded data)"""
         try:
-            print("Creating Sketchfab-optimized GLTF file...")
+            if self.debug:
+                print("Creating Sketchfab-optimized GLTF file...")
             
             # Ensure we have Path objects
             input_path = Path(input_path)
@@ -1088,11 +1206,13 @@ class VoxBridgeConverter:
             
             # Handle GLB files specially to ensure binary data is extracted
             if input_path.suffix.lower() == '.glb':
-                print("📦 Processing GLB file - extracting binary data...")
+                if self.debug:
+                    print("Processing GLB file - extracting binary data...")
                 # Use the main conversion method which properly handles GLB files
                 success = self.convert_gltf_json(input_path, output_path)
                 if not success:
-                    print("❌ Failed to convert GLB file")
+                    if self.debug:
+                        print("Failed to convert GLB file")
                     return False
             else:
                 # For existing GLTF files, just clean them
@@ -1103,20 +1223,23 @@ class VoxBridgeConverter:
                     for buffer in gltf_data['buffers']:
                         # Remove any data URIs and keep only external references
                         if 'uri' in buffer and buffer['uri'].startswith('data:'):
-                            print("⚠️ Removing embedded data URI for Sketchfab compatibility")
+                            if self.debug:
+                                print("Removing embedded data URI for Sketchfab compatibility")
                             del buffer['uri']
                         # Keep byteLength for proper buffer handling
                         if 'byteLength' not in buffer:
-                            print("⚠️ Adding byteLength for proper buffer handling")
+                            if self.debug:
+                                print("Adding byteLength for proper buffer handling")
                             buffer['byteLength'] = 0  # Will be updated by external tools
                 
                 # Write the clean glTF file
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Created Sketchfab-optimized GLTF: {output_path}")
-            print(f"📊 File size: {output_path.stat().st_size:,} bytes")
-            print(f"💡 This file is optimized for Sketchfab and other web platforms")
+            if self.debug:
+                print(f"Created Sketchfab-optimized GLTF: {output_path}")
+                print(f"File size: {output_path.stat().st_size:,} bytes")
+                print(f"This file is optimized for Sketchfab and other web platforms")
             
             # Create ZIP package for Sketchfab (like the working example)
             self._create_sketchfab_package(output_path)
@@ -1124,7 +1247,8 @@ class VoxBridgeConverter:
             return True
             
         except Exception as e:
-            print(f"❌ Failed to create Sketchfab GLTF: {e}")
+            if self.debug:
+                print(f"Failed to create Sketchfab GLTF: {e}")
             return False
     
     def _create_sketchfab_package(self, gltf_path: Path) -> bool:
@@ -1167,14 +1291,16 @@ class VoxBridgeConverter:
                 for file_path, zip_name in files_to_zip:
                     zipf.write(file_path, zip_name)
             
-            print(f"📦 Created Sketchfab package: {zip_path}")
-            print(f"📁 Files included: {[name for _, name in files_to_zip]}")
-            print(f"💡 Upload this ZIP file to Sketchfab")
+            if self.debug:
+                print(f"Created Sketchfab package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+                print(f"Upload this ZIP file to Sketchfab")
             
             return True
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create ZIP package: {e}")
+            if self.debug:
+                print(f"Warning: Could not create ZIP package: {e}")
             return False
 
     def _extract_image_paths(self, gltf_data: Dict, base_path: Path) -> List[Path]:
@@ -1191,6 +1317,31 @@ class VoxBridgeConverter:
         
         return image_paths
 
+    def _get_component_type_size(self, component_type: int) -> int:
+        """Get the size in bytes for a given component type"""
+        component_sizes = {
+            5120: 1,   # BYTE
+            5121: 1,   # UNSIGNED_BYTE
+            5122: 2,   # SHORT
+            5123: 2,   # UNSIGNED_SHORT
+            5125: 4,   # UNSIGNED_INT
+            5126: 4,   # FLOAT
+        }
+        return component_sizes.get(component_type, 4)
+    
+    def _get_type_num_components(self, type_name: str) -> int:
+        """Get the number of components for a given type"""
+        type_components = {
+            'SCALAR': 1,
+            'VEC2': 2,
+            'VEC3': 3,
+            'VEC4': 4,
+            'MAT2': 4,
+            'MAT3': 9,
+            'MAT4': 16,
+        }
+        return type_components.get(type_name, 1)
+    
     def _extract_binary_data(self, gltf, gltf_data: Dict) -> Dict[str, bytes]:
         """Extract binary buffer data from GLTF2 object"""
         binary_data = {}
@@ -1203,7 +1354,8 @@ class VoxBridgeConverter:
                     end = start + buffer_view.byteLength
                     if start < len(gltf._glb_data) and end <= len(gltf._glb_data):
                         binary_data[f'bufferView_{i}'] = gltf._glb_data[start:end]
-                        print(f"📦 Extracted buffer view {i}: {len(gltf._glb_data[start:end])} bytes")
+                        if self.debug:
+                            print(f"Extracted buffer view {i}: {len(gltf._glb_data[start:end])} bytes")
         
         return binary_data
 
@@ -1255,21 +1407,24 @@ class VoxBridgeConverter:
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied texture: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied texture: {file_path.name}")
                 
                 # Copy only the specific .bin file for this conversion
                 elif file_path.suffix.lower() == '.bin' and file_path.name == f"{output_path.stem}.bin":
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied binary data: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied binary data: {file_path.name}")
                 
                 # Copy other potentially referenced files
                 elif file_path.suffix.lower() in ['.ktx', '.ktx2', '.webp']:
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied additional texture: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied additional texture: {file_path.name}")
         
         # Also check for files that might be referenced in the glTF but not in the same directory
         try:
@@ -1287,7 +1442,8 @@ class VoxBridgeConverter:
                                 dest = output_dir / image_path.name
                                 if not dest.exists():
                                     shutil.copy2(image_path, dest)
-                                    print(f"📁 Copied referenced image: {image_path.name}")
+                                    if self.debug:
+                                        print(f"Copied referenced image: {image_path.name}")
                             
                             # Also copy from parent directory if it exists there
                             parent_image_path = input_dir.parent / image['uri']
@@ -1295,10 +1451,12 @@ class VoxBridgeConverter:
                                 dest = output_dir / parent_image_path.name
                                 if not dest.exists():
                                     shutil.copy2(parent_image_path, dest)
-                                    print(f"📁 Copied referenced image from parent: {parent_image_path.name}")
+                                    if self.debug:
+                                        print(f"Copied referenced image from parent: {parent_image_path.name}")
                                     
         except Exception as e:
-            print(f"⚠️ Warning: Could not check for additional referenced files: {e}")
+            if self.debug:
+                print(f"Warning: Could not check for additional referenced files: {e}")
 
     def generate_performance_report(self, input_path: Path, output_path: Path, stats: Dict, changes: Optional[List[str]] = None) -> Dict:
         """
@@ -1381,9 +1539,10 @@ class VoxBridgeConverter:
     def _convert_gltf_to_glb(self, gltf_data: Dict, output_path: Path) -> bool:
         """Convert glTF JSON data to GLTF format (GLB generation disabled)"""
         try:
-            print(f"Converting to GLTF format...")
-            print(f"glTF data keys: {list(gltf_data.keys())}")
-            print(f"Output path: {output_path}")
+            if self.debug:
+                print(f"Converting to GLTF format...")
+                print(f"glTF data keys: {list(gltf_data.keys())}")
+                print(f"Output path: {output_path}")
             
             # Skip GLB conversion entirely - go straight to GLTF output
             # This prevents unnecessary .glb files and ensures clean output
@@ -1391,7 +1550,8 @@ class VoxBridgeConverter:
             with open(gltf_output, 'w', encoding='utf-8') as f:
                 json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Saved as GLTF: {gltf_output}")
+            if self.debug:
+                print(f"Saved as GLTF: {gltf_output}")
             
             # Run automatic validation
             self._run_validation(gltf_output)
@@ -1416,7 +1576,8 @@ class VoxBridgeConverter:
                     if not image['uri'].startswith(('http://', 'https://', 'data:')):
                         image_path = base_path / image['uri']
                         if not image_path.exists():
-                            print(f"⚠️ Warning: Image file not found: {image['uri']}")
+                            if self.debug:
+                                print(f"Warning: Image file not found: {image['uri']}")
         
         # Ensure buffers have proper URIs
         if 'buffers' in gltf_data:
@@ -1426,7 +1587,8 @@ class VoxBridgeConverter:
                     if not buffer['uri'].startswith(('http://', 'https://', 'data:')):
                         buffer_path = base_path / buffer['uri']
                         if not buffer_path.exists():
-                            print(f"⚠️ Warning: Buffer file not found: {buffer['uri']}")
+                            if self.debug:
+                                print(f"Warning: Buffer file not found: {buffer['uri']}")
         
         # Ensure textures reference valid images
         if 'textures' in gltf_data:
@@ -1437,7 +1599,8 @@ class VoxBridgeConverter:
                         # Texture references a valid image
                         pass
                     else:
-                        print(f"⚠️ Warning: Texture references invalid image index: {source_index}")
+                        if self.debug:
+                            print(f"Warning: Texture references invalid image index: {source_index}")
         
         # Ensure accessors reference valid buffer views
         if 'accessors' in gltf_data:
@@ -1448,7 +1611,8 @@ class VoxBridgeConverter:
                         # Accessor references a valid buffer view
                         pass
                     else:
-                        print(f"⚠️ Warning: Accessor references invalid buffer view index: {buffer_view_index}")
+                        if self.debug:
+                            print(f"Warning: Accessor references invalid buffer view index: {buffer_view_index}")
 
     def _cleanup_old_outputs(self, output_path: Path):
         """Clean up old output files to prevent duplicates and accumulation"""
@@ -1460,15 +1624,18 @@ class VoxBridgeConverter:
             for old_file in output_dir.glob(f"{output_stem}*"):
                 if old_file != output_path:  # Don't delete the target file
                     old_file.unlink()
-                    print(f"🗑️  Cleaned up old file: {old_file.name}")
+                    if self.debug:
+                        print(f"Cleaned up old file: {old_file.name}")
             
             # Remove any .glb files since we no longer generate them
             for old_glb in output_dir.glob("*.glb"):
                 old_glb.unlink()
-                print(f"🗑️  Cleaned up old GLB file: {old_glb.name}")
+                if self.debug:
+                    print(f"Cleaned up old GLB file: {old_glb.name}")
                     
         except Exception as e:
-            print(f"⚠️  Warning: Could not clean up old files: {e}")
+            if self.debug:
+                print(f"Warning: Could not clean up old files: {e}")
 
     def _run_validation(self, gltf_path: Path) -> bool:
         """Run Node.js validation on the generated GLTF file"""
@@ -1480,38 +1647,45 @@ class VoxBridgeConverter:
             try:
                 result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=10)
                 if result.returncode != 0:
-                    print("⚠️  Node.js not available, skipping validation")
+                    if self.debug:
+                        print("Node.js not available, skipping validation")
                     return True
             except (subprocess.TimeoutExpired, FileNotFoundError):
-                print("⚠️  Node.js not available, skipping validation")
+                if self.debug:
+                    print("Node.js not available, skipping validation")
                 return True
             
             # Run the validation script
             validator_path = Path(__file__).parent / 'validate_gltf.js'
             if not validator_path.exists():
-                print("⚠️  Validation script not found, skipping validation")
+                if self.debug:
+                    print("Validation script not found, skipping validation")
                 return True
             
-            print("🔍 Running Node.js validation...")
+            if self.debug:
+                print("Running Node.js validation...")
             result = subprocess.run(
                 ['node', str(validator_path), str(gltf_path)],
                 capture_output=True, text=True, timeout=30
             )
             
             if result.returncode == 0:
-                print("✅ Validation passed!")
+                if self.debug:
+                    print("Validation passed!")
                 return True
             else:
-                print("❌ Validation failed!")
-                print("Validation output:")
-                print(result.stdout)
-                if result.stderr:
-                    print("Validation errors:")
-                    print(result.stderr)
+                if self.debug:
+                    print("Validation failed!")
+                    print("Validation output:")
+                    print(result.stdout)
+                    if result.stderr:
+                        print("Validation errors:")
+                        print(result.stderr)
                 return False
                 
         except Exception as e:
-            print(f"⚠️  Validation failed with error: {e}")
+            if self.debug:
+                print(f"Validation failed with error: {e}")
             return True  # Don't fail conversion due to validation issues
 
 

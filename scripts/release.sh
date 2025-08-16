@@ -73,7 +73,7 @@ voxbridge doctor > /dev/null 2>&1 || {
     exit 1
 }
 
-echo "✅ Local installation test passed"
+echo " Local installation test passed"
 
 echo ""
 echo "Step 3: Preparing git commit..."
