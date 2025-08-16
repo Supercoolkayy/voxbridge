@@ -42,33 +42,155 @@ class VoxBridgeConverter:
         return True
     
     def find_blender(self) -> Optional[str]:
-        """Find Blender executable in common locations"""
-        possible_paths = [
-            # Windows
+        """Find Blender executable in common locations with platform detection"""
+        import platform
+        
+        # Check environment variable override first
+        blender_path = os.environ.get('BLENDER_PATH')
+        if blender_path and os.path.exists(blender_path):
+            return blender_path
+        
+        # Detect platform
+        system = platform.system()
+        is_wsl = self._is_wsl()
+        
+        if self.debug:
+            print(f"Platform detection: {system}, WSL: {is_wsl}")
+        
+        # Check if blender is in PATH first
+        if shutil.which("blender"):
+            return "blender"
+        
+        # Platform-specific paths
+        if system == "Windows":
+            possible_paths = self._get_windows_blender_paths()
+        elif system == "Darwin":  # macOS
+            possible_paths = self._get_macos_blender_paths()
+        elif system == "Linux":
+            if is_wsl:
+                possible_paths = self._get_wsl_blender_paths()
+            else:
+                possible_paths = self._get_linux_blender_paths()
+        else:
+            possible_paths = []
+        
+        # Check common installation paths
+        for path in possible_paths:
+            if os.path.exists(path):
+                if self.debug:
+                    print(f"Found Blender at: {path}")
+                return path
+        
+        if self.debug:
+            print("No Blender installation found")
+        return None
+    
+    def _is_wsl(self) -> bool:
+        """Detect if running under WSL"""
+        try:
+            # Check for WSL-specific environment variables
+            if os.environ.get("WSL_DISTRO_NAME"):
+                return True
+            
+            # Check /proc/version for WSL indicators
+            if os.path.exists("/proc/version"):
+                with open("/proc/version", "r") as f:
+                    version_info = f.read().lower()
+                    if "microsoft" in version_info or "wsl" in version_info:
+                        return True
+            
+            return False
+        except:
+            return False
+    
+    def _get_windows_blender_paths(self) -> List[str]:
+        """Get Windows Blender installation paths"""
+        paths = []
+        
+        # Common Windows installation paths
+        program_files = os.environ.get('ProgramFiles', 'C:\\Program Files')
+        program_files_x86 = os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')
+        
+        # Check both Program Files directories
+        for base_path in [program_files, program_files_x86]:
+            if os.path.exists(base_path):
+                # Look for Blender Foundation folder
+                blender_foundation = os.path.join(base_path, "Blender Foundation")
+                if os.path.exists(blender_foundation):
+                    # Check for versioned folders
+                    for item in os.listdir(blender_foundation):
+                        if item.startswith("Blender "):
+                            blender_exe = os.path.join(blender_foundation, item, "blender.exe")
+                            if os.path.exists(blender_exe):
+                                paths.append(blender_exe)
+        
+        # Add specific known paths
+        specific_paths = [
             r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-            # macOS
+            r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+        ]
+        
+        for path in specific_paths:
+            if os.path.exists(path):
+                paths.append(path)
+        
+        return paths
+    
+    def _get_macos_blender_paths(self) -> List[str]:
+        """Get macOS Blender installation paths"""
+        paths = [
             "/Applications/Blender.app/Contents/MacOS/Blender",
-            # Linux
+            "/Applications/Blender.app/Contents/MacOS/blender",
+            "/opt/homebrew/bin/blender",  # Homebrew installation
+            "/usr/local/bin/blender",     # Local installation
+        ]
+        return paths
+    
+    def _get_linux_blender_paths(self) -> List[str]:
+        """Get Linux Blender installation paths"""
+        paths = [
             "/usr/bin/blender",
             "/usr/local/bin/blender",
             "/snap/bin/blender",
-            # Flatpak
-            "/var/lib/flatpak/exports/bin/org.blender.Blender"
+            "/var/lib/flatpak/exports/bin/org.blender.Blender",
+            "/opt/blender/blender",  # Manual installation
         ]
+        return paths
+    
+    def _get_wsl_blender_paths(self) -> List[str]:
+        """Get WSL Blender installation paths (Linux + Windows fallback)"""
+        paths = []
         
-        # Check if blender is in PATH
-        if shutil.which("blender"):
-            return "blender"
+        # First, try Linux-style paths (in case user installed Blender inside WSL)
+        linux_paths = self._get_linux_blender_paths()
+        paths.extend(linux_paths)
+        
+        # Then, try Windows paths accessible from WSL
+        try:
+            # Check if Windows drives are mounted
+            windows_paths = [
+                "/mnt/c/Program Files/Blender Foundation",
+                "/mnt/c/Program Files (x86)/Blender Foundation",
+            ]
             
-        # Check common installation paths
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-                
-        return None
+            for base_path in windows_paths:
+                if os.path.exists(base_path):
+                    # Look for versioned folders
+                    for item in os.listdir(base_path):
+                        if item.startswith("Blender "):
+                            blender_exe = os.path.join(base_path, item, "blender.exe")
+                            if os.path.exists(blender_exe):
+                                paths.append(blender_exe)
+                                if self.debug:
+                                    print(f"Found Windows Blender in WSL: {blender_exe}")
+        except Exception as e:
+            if self.debug:
+                print(f"Error checking Windows paths in WSL: {e}")
+        
+        return paths
     
     def clean_gltf_json(self, gltf_path: Path, output_path: Path = None) -> Tuple[Dict, List[str]]:
         """Clean glTF JSON for texture paths and material names"""
@@ -583,6 +705,8 @@ class VoxBridgeConverter:
         if not blender_exe:
             if self.debug:
                 print("Blender not found, using basic conversion...")
+            print("Blender not found. Please install Blender and set BLENDER_PATH environment variable.")
+            print("Or ensure Blender is installed in a standard location for your platform.")
             return False
         
         if not self.blender_script_path.exists():
