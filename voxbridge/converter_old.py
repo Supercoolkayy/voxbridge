@@ -184,8 +184,8 @@ class VoxBridgeConverter:
                 if hasattr(gltf, 'lights') and gltf.lights:
                     gltf_data['lights'] = gltf.lights
                 
-                print(f"✅ Successfully extracted GLB data using pygltflib")
-                print(f"📊 Components found: {list(gltf_data.keys())}")
+                print(f" Successfully extracted GLB data using pygltflib")
+                print(f" Components found: {list(gltf_data.keys())}")
                 
                 # Extract binary data for potential re-embedding
                 if hasattr(gltf, '_glb_data') and gltf._glb_data:
@@ -383,8 +383,8 @@ class VoxBridgeConverter:
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
                 
-                print(f"✅ Created clean glTF: {output_path}")
-                print(f"📊 File size: {output_path.stat().st_size:,} bytes")
+                print(f" Created clean glTF: {output_path}")
+                print(f" File size: {output_path.stat().st_size:,} bytes")
                 print(f"💡 Note: This file references external data and is optimized for {platform}")
                 
                 # Ensure complete output structure
@@ -820,7 +820,7 @@ class VoxBridgeConverter:
                     if 'byteLength' in buffer:
                         del buffer['byteLength']
             
-            print("✅ Binary data embedded successfully")
+            print(" Binary data embedded successfully")
         else:
             print("⚠️ No binary data found in original GLB")
         
@@ -863,8 +863,8 @@ class VoxBridgeConverter:
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Created Sketchfab-optimized GLTF: {output_path}")
-            print(f"📊 File size: {output_path.stat().st_size:,} bytes")
+            print(f" Created Sketchfab-optimized GLTF: {output_path}")
+            print(f" File size: {output_path.stat().st_size:,} bytes")
             print(f"💡 This file is optimized for Sketchfab and other web platforms")
             
             # Create ZIP package for Sketchfab (like the working example)
@@ -1194,7 +1194,7 @@ class VoxBridgeConverter:
                 
                 # Save as GLB
                 gltf.save(str(output_path))
-                print(f"✅ Successfully created GLB file: {output_path}")
+                print(f" Successfully created GLB file: {output_path}")
                 return True
                 
             except Exception as glb_error:

@@ -41,7 +41,7 @@ def audit_files():
         if path.exists():
             print(f"  ❌ {file_path} - Should be removed")
         else:
-            print(f"  ✅ {file_path} - Already removed or doesn't exist")
+            print(f"   {file_path} - Already removed or doesn't exist")
     
     # Check for directories that should be cleaned
     print("\nChecking for directories that should be cleaned:")
@@ -53,13 +53,13 @@ def audit_files():
                 if match.exists():
                     print(f"  ❌ {match} - Should be removed")
                 else:
-                    print(f"  ✅ {match} - Already removed")
+                    print(f"   {match} - Already removed")
         else:
             path = Path(dir_pattern)
             if path.exists():
                 print(f"  ❌ {dir_pattern} - Should be removed")
             else:
-                print(f"  ✅ {dir_pattern} - Already removed or doesn't exist")
+                print(f"   {dir_pattern} - Already removed or doesn't exist")
     
     # Check for redundant documentation
     print("\nChecking for redundant documentation:")
@@ -87,7 +87,7 @@ def audit_files():
     for test_file in test_files:
         path = Path(test_file)
         if path.exists():
-            print(f"  ✅ {test_file} - Exists")
+            print(f"   {test_file} - Exists")
         else:
             print(f"  ❌ {test_file} - Missing")
     
@@ -108,7 +108,7 @@ def audit_files():
     for essential_file in essential_files:
         path = Path(essential_file)
         if path.exists():
-            print(f"  ✅ {essential_file} - Exists")
+            print(f"   {essential_file} - Exists")
         else:
             print(f"  ❌ {essential_file} - Missing")
 
@@ -191,14 +191,14 @@ def verify_structure():
             if isinstance(details, dict):
                 # Directory
                 if path.exists():
-                    print(f"  ✅ {path}/ - Exists")
+                    print(f"   {path}/ - Exists")
                     check_structure(details, str(path))
                 else:
                     print(f"  ❌ {path}/ - Missing")
             else:
                 # File
                 if path.exists():
-                    print(f"  ✅ {path} - {details}")
+                    print(f"   {path} - {details}")
                 else:
                     print(f"  ❌ {path} - Missing ({details})")
     

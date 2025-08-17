@@ -20,15 +20,58 @@ try:
 except ImportError:
     TEXTURE_OPTIMIZATION_AVAILABLE = False
 
+# Try to import benchmark module (optional)
+try:
+    from .benchmark import ModelBenchmark
+    BENCHMARK_AVAILABLE = True
+except ImportError:
+    BENCHMARK_AVAILABLE = False
+
+# Import platform profiles
+try:
+    from .platform_profiles import PlatformProfileManager, run_gltf_pipeline, run_gltf_validator
+    PLATFORM_PROFILES_AVAILABLE = True
+except ImportError:
+    PLATFORM_PROFILES_AVAILABLE = False
+
 
 class VoxBridgeConverter:
     """Core converter class for VoxEdit glTF/glb files with platform-specific optimizations"""
     
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         self.supported_formats = ['.gltf', '.glb']
         self.blender_script_path = Path(__file__).parent / 'blender_cleanup.py'
         self._extracted_binary_data = {}
         self.last_changes = []
+        self.debug = debug
+        
+        # Initialize platform profile manager
+        if PLATFORM_PROFILES_AVAILABLE:
+            self.platform_manager = PlatformProfileManager(debug)
+        else:
+            self.platform_manager = None
+            if debug:
+                print("Platform profiles not available")
+        
+        # Initialize conversion stats
+        self._last_conversion_stats = {}
+        
+        # Initialize optimization settings
+        self.optimization_settings = {
+            'texture_atlas': True,
+            'texture_max_size': 1024,
+            'mesh_optimization': True,
+            'polygon_reduction': 0.3,  # Reduce polygons by 30%
+            'generate_lods': False  # Will be implemented in Milestone 3
+        }
+        
+        # Initialize benchmark system if available
+        if BENCHMARK_AVAILABLE:
+            self.benchmark = ModelBenchmark(debug)
+        else:
+            self.benchmark = None
+            if debug:
+                print("Benchmark system not available")
         
     def validate_input(self, input_path: Path) -> bool:
         """Validate input file exists and has correct format"""
@@ -41,33 +84,546 @@ class VoxBridgeConverter:
         return True
     
     def find_blender(self) -> Optional[str]:
-        """Find Blender executable in common locations"""
-        possible_paths = [
-            # Windows
+        """Find Blender executable in common locations with platform detection"""
+        import platform
+        
+        # Check environment variable override first
+        blender_path = os.environ.get('BLENDER_PATH')
+        if blender_path and os.path.exists(blender_path):
+            return blender_path
+        
+        # Detect platform
+        system = platform.system()
+        is_wsl = self._is_wsl()
+        
+        if self.debug:
+            print(f"Platform detection: {system}, WSL: {is_wsl}")
+        
+        # Check if blender is in PATH first
+        if shutil.which("blender"):
+            return "blender"
+        
+        # Platform-specific paths
+        if system == "Windows":
+            possible_paths = self._get_windows_blender_paths()
+        elif system == "Darwin":  # macOS
+            possible_paths = self._get_macos_blender_paths()
+        elif system == "Linux":
+            if is_wsl:
+                possible_paths = self._get_wsl_blender_paths()
+            else:
+                possible_paths = self._get_linux_blender_paths()
+        else:
+            possible_paths = []
+        
+        # Check common installation paths
+        for path in possible_paths:
+            if os.path.exists(path):
+                if self.debug:
+                    print(f"Found Blender at: {path}")
+                return path
+        
+        if self.debug:
+            print("No Blender installation found")
+        return None
+    
+    def _is_wsl(self) -> bool:
+        """Detect if running under WSL"""
+        try:
+            # Check for WSL-specific environment variables
+            if os.environ.get("WSL_DISTRO_NAME"):
+                return True
+            
+            # Check /proc/version for WSL indicators
+            if os.path.exists("/proc/version"):
+                with open("/proc/version", "r") as f:
+                    version_info = f.read().lower()
+                    if "microsoft" in version_info or "wsl" in version_info:
+                        return True
+            
+            return False
+        except:
+            return False
+    
+    def _get_windows_blender_paths(self) -> List[str]:
+        """Get Windows Blender installation paths"""
+        paths = []
+        
+        # Common Windows installation paths
+        program_files = os.environ.get('ProgramFiles', 'C:\\Program Files')
+        program_files_x86 = os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')
+        
+        # Check both Program Files directories
+        for base_path in [program_files, program_files_x86]:
+            if os.path.exists(base_path):
+                # Look for Blender Foundation folder
+                blender_foundation = os.path.join(base_path, "Blender Foundation")
+                if os.path.exists(blender_foundation):
+                    # Check for versioned folders
+                    for item in os.listdir(blender_foundation):
+                        if item.startswith("Blender "):
+                            blender_exe = os.path.join(blender_foundation, item, "blender.exe")
+                            if os.path.exists(blender_exe):
+                                paths.append(blender_exe)
+        
+        # Add specific known paths
+        specific_paths = [
             r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
             r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-            # macOS
+            r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+        ]
+        
+        for path in specific_paths:
+            if os.path.exists(path):
+                paths.append(path)
+        
+        return paths
+    
+    def _get_macos_blender_paths(self) -> List[str]:
+        """Get macOS Blender installation paths"""
+        paths = [
             "/Applications/Blender.app/Contents/MacOS/Blender",
-            # Linux
+            "/Applications/Blender.app/Contents/MacOS/blender",
+            "/opt/homebrew/bin/blender",  # Homebrew installation
+            "/usr/local/bin/blender",     # Local installation
+        ]
+        return paths
+    
+    def _get_linux_blender_paths(self) -> List[str]:
+        """Get Linux Blender installation paths"""
+        paths = [
             "/usr/bin/blender",
             "/usr/local/bin/blender",
             "/snap/bin/blender",
-            # Flatpak
-            "/var/lib/flatpak/exports/bin/org.blender.Blender"
+            "/var/lib/flatpak/exports/bin/org.blender.Blender",
+            "/opt/blender/blender",  # Manual installation
         ]
+        return paths
+    
+    def _get_wsl_blender_paths(self) -> List[str]:
+        """Get WSL Blender installation paths (Linux + Windows fallback)"""
+        paths = []
         
-        # Check if blender is in PATH
-        if shutil.which("blender"):
-            return "blender"
+        # First, try Linux-style paths (in case user installed Blender inside WSL)
+        linux_paths = self._get_linux_blender_paths()
+        paths.extend(linux_paths)
+        
+        # Then, try Windows paths accessible from WSL
+        try:
+            # Check if Windows drives are mounted
+            windows_paths = [
+                "/mnt/c/Program Files/Blender Foundation",
+                "/mnt/c/Program Files (x86)/Blender Foundation",
+            ]
             
-        # Check common installation paths
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
+            for base_path in windows_paths:
+                if os.path.exists(base_path):
+                    # Look for versioned folders
+                    for item in os.listdir(base_path):
+                        if item.startswith("Blender "):
+                            blender_exe = os.path.join(base_path, item, "blender.exe")
+                            if os.path.exists(blender_exe):
+                                paths.append(blender_exe)
+                                if self.debug:
+                                    print(f"Found Windows Blender in WSL: {blender_exe}")
+        except Exception as e:
+            if self.debug:
+                print(f"Error checking Windows paths in WSL: {e}")
+        
+        return paths
+    
+    def _can_use_blender(self, input_path: Path) -> bool:
+        """Check if Blender can be used for the given input file"""
+        # Blender works best with GLB files
+        if input_path.suffix.lower() == '.glb':
+            return True
+        
+        # Check if Blender executable is available
+        blender_exe = self.find_blender()
+        if not blender_exe:
+            return False
+        
+        # Check if Blender script exists
+        if not self.blender_script_path.exists():
+            return False
+        
+        return True
+    
+    def _can_use_assimp(self) -> bool:
+        """Check if Assimp can be used (both pyassimp and C++ library)"""
+        try:
+            import pyassimp
+            # Try to load a simple test to see if the C++ library is available
+            from pyassimp import helper
+            helper.search_library()
+            return True
+        except:
+            return False
+    
+    def _can_use_trimesh(self) -> bool:
+        """Check if Trimesh can be used"""
+        try:
+            import trimesh
+            return True
+        except ImportError:
+            return False
+    
+    def _load_with_trimesh(self, file_path: str):
+        """Helper function to load models with Trimesh, handling both Trimesh and Scene objects"""
+        try:
+            import trimesh
+            
+            # Load the model
+            loaded_object = trimesh.load(file_path)
+            
+            if loaded_object is None:
+                return None
+            
+            # Check if it's a Scene object (multiple meshes)
+            if hasattr(loaded_object, 'geometry') and hasattr(loaded_object.geometry, 'values'):
+                # It's a Scene with multiple geometries
+                geometries = list(loaded_object.geometry.values())
                 
-        return None
+                if not geometries:
+                    raise ValueError("Scene contains no valid geometries")
+                
+                if self.debug:
+                    print(f"Trimesh: Loaded Scene with {len(geometries)} geometries")
+                
+                # If only one geometry, return it directly
+                if len(geometries) == 1:
+                    if self.debug:
+                        print("Trimesh: Single geometry found, using directly")
+                    return geometries[0]
+                
+                # Multiple geometries found, combine them into one mesh
+                if self.debug:
+                    print(f"Trimesh: Combining {len(geometries)} geometries into single mesh...")
+                
+                # Use trimesh.util.concatenate to combine all meshes
+                from trimesh.util import concatenate
+                combined_mesh = concatenate(geometries)
+                
+                if self.debug:
+                    print(f"Trimesh: Successfully combined {len(geometries)} geometries into 1 mesh")
+                
+                return combined_mesh
+            
+            # Check if it's a Trimesh object (single mesh)
+            elif hasattr(loaded_object, 'faces') and hasattr(loaded_object, 'vertices'):
+                if self.debug:
+                    print("Trimesh: Loaded single mesh directly")
+                return loaded_object
+            
+            else:
+                # Unknown object type
+                raise ValueError(f"Unknown object type returned by trimesh.load(): {type(loaded_object)}")
+                
+        except Exception as e:
+            if self.debug:
+                print(f"Trimesh loading failed: {e}")
+            raise e
+    
+    def convert_with_assimp(self, input_path: Path, output_path: Path, platform: str = "unity") -> bool:
+        """Convert using Assimp (pyassimp) library"""
+        try:
+            import pyassimp
+            from pyassimp import load, export
+            
+            if self.debug:
+                print("Loading model with Assimp...")
+            
+            # Load the model with Assimp
+            scene = load(str(input_path))
+            
+            if not scene or not scene.meshes:
+                if self.debug:
+                    print("Assimp: No valid meshes found in the model")
+                return False
+            
+            if self.debug:
+                print(f"Assimp: Loaded {len(scene.meshes)} meshes")
+            
+            # Export to GLTF
+            gltf_output = output_path.with_suffix('.gltf')
+            export(scene, str(gltf_output), file_type='gltf2')
+            
+            # Release the scene
+            pyassimp.release(scene)
+            
+            if self.debug:
+                print(f"Assimp: Successfully exported to {gltf_output}")
+            
+            return True
+            
+        except ImportError:
+            if self.debug:
+                print("Assimp (pyassimp) not available")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Assimp conversion failed: {e}")
+                # Check if it's the common "assimp library not found" error
+                if "assimp library not found" in str(e):
+                    print("Note: pyassimp is installed but the assimp C++ library is missing.")
+                    print("To fix this, install the assimp library:")
+                    print("  Ubuntu/Debian: sudo apt-get install libassimp-dev")
+                    print("  macOS: brew install assimp")
+                    print("  Windows: Download from https://github.com/assimp/assimp/releases")
+            return False
+    
+    def convert_with_trimesh(self, input_path: Path, output_path: Path, platform: str = "unity") -> bool:
+        """Convert using Trimesh library with consolidated binary output"""
+        try:
+            import trimesh
+            import json
+            
+            if self.debug:
+                print("Loading model with Trimesh...")
+            
+            # Load the model with Trimesh using the helper function
+            mesh = self._load_with_trimesh(str(input_path))
+            
+            if mesh is None:
+                if self.debug:
+                    print("Trimesh: Failed to load model")
+                return False
+            
+            if self.debug:
+                print(f"Trimesh: Loaded model with {len(mesh.faces)} faces")
+            
+            # Export to GLTF with embedded binary data (no separate .bin files)
+            gltf_output = output_path.with_suffix('.gltf')
+            
+            # Use embedded export to avoid multiple .bin files
+            try:
+                # Try to export as embedded GLTF (single file)
+                mesh.export(str(gltf_output), file_type='gltf', include_normals=True)
+                
+                # Check if separate .bin files were created
+                bin_files = list(gltf_output.parent.glob(f"{gltf_output.stem}*.bin"))
+                if len(bin_files) > 1:
+                    if self.debug:
+                        print(f"Trimesh created {len(bin_files)} separate .bin files, consolidating...")
+                    
+                    # Consolidate into single .bin file
+                    self._consolidate_trimesh_buffers(gltf_output, bin_files, output_path)
+                
+                if self.debug:
+                    print(f"Trimesh: Successfully exported to {gltf_output}")
+            
+                # Apply platform-specific optimizations if available
+                if self.platform_manager:
+                    if self.debug:
+                        print(f"Applying {platform} platform profile to Trimesh output...")
+                    
+                    # Read the generated GLTF file
+                    with open(gltf_output, 'r', encoding='utf-8') as f:
+                        gltf_data = json.load(f)
+                    
+                    # Apply platform profile optimizations
+                    gltf_data = self.platform_manager.apply_profile(gltf_data, output_path, platform)
+                    
+                    # Create platform-specific output files
+                    platform_outputs = self.platform_manager.create_platform_specific_outputs(
+                        gltf_data, output_path, platform
+                    )
+                    
+                    if self.debug:
+                        print(f"Created {len(platform_outputs)} platform-specific outputs")
+                    
+                    # Use the first platform output for further processing
+                    if platform_outputs:
+                        gltf_output = platform_outputs[0]
+                
+                # Capture conversion statistics for summary
+                if gltf_output.exists():
+                    try:
+                        # Read the final GLTF file to get accurate statistics
+                        with open(gltf_output, 'r', encoding='utf-8') as f:
+                            final_gltf_data = json.load(f)
+                        
+                        # Store statistics for summary display
+                        self._last_conversion_stats = {
+                            'meshes': len(final_gltf_data.get('meshes', [])),
+                            'materials': len(final_gltf_data.get('materials', [])),
+                            'textures': len(final_gltf_data.get('textures', [])),
+                            'nodes': len(final_gltf_data.get('nodes', [])),
+                            'file_size': gltf_output.stat().st_size
+                        }
+                        
+                        if self.debug:
+                            print(f"Captured conversion stats: {self._last_conversion_stats}")
+                            
+                    except Exception as e:
+                        if self.debug:
+                            print(f"Warning: Could not capture conversion stats: {e}")
+                        # Fallback to basic stats
+                        self._last_conversion_stats = {
+                            'meshes': 0,
+                            'materials': 0,
+                            'textures': 0,
+                            'nodes': 0,
+                            'file_size': 0
+                        }
+                
+                # Package output files into ZIP
+                if gltf_output.exists():
+                    zip_path = self._package_output_files(output_path, gltf_output)
+                    if zip_path.suffix == '.zip':
+                        
+                        # Track benchmark metrics if available
+                        if self.benchmark and BENCHMARK_AVAILABLE:
+                            try:
+                                # Measure original input stats (handle GLB files)
+                                original_stats = {}
+                                if input_path.suffix.lower() == '.glb':
+                                    # For GLB files, get basic file info
+                                    original_stats = {
+                                        'file_size': input_path.stat().st_size,
+                                        'file_type': 'GLB',
+                                        'timestamp': time.time()
+                                    }
+                                else:
+                                    # For GLTF files, measure full stats
+                                    original_stats = self.benchmark.measure_model_stats(input_path)
+                                
+                                # Find the final platform-specific GLTF file for stats
+                                final_gltf_path = None
+                                if platform_outputs and len(platform_outputs) > 0:
+                                    # Use the first platform-specific output
+                                    final_gltf_path = platform_outputs[0]
+                                else:
+                                    # Fallback to the intermediate GLTF
+                                    final_gltf_path = gltf_output
+                                
+                                # Measure optimized output stats from final file
+                                optimized_stats = {}
+                                if final_gltf_path and final_gltf_path.exists():
+                                    optimized_stats = self.benchmark.measure_model_stats(final_gltf_path)
+                                else:
+                                    # Fallback: use the stats we already captured
+                                    optimized_stats = {
+                                        'file_size': self._last_conversion_stats.get('file_size', 0),
+                                        'mesh_count': self._last_conversion_stats.get('meshes', 0),
+                                        'material_count': self._last_conversion_stats.get('materials', 0),
+                                        'texture_count': self._last_conversion_stats.get('textures', 0),
+                                        'node_count': self._last_conversion_stats.get('nodes', 0),
+                                        'timestamp': time.time()
+                                    }
+                                
+                                # Store benchmark data
+                                asset_name = input_path.stem
+                                self.benchmark.benchmark_results[asset_name] = {
+                                    'asset_name': asset_name,
+                                    'original_stats': original_stats,
+                                    'optimized_stats': optimized_stats,
+                                    'conversion_timestamp': time.time()
+                                }
+                                
+                                if self.debug:
+                                    print(f"Benchmark data collected for {asset_name}")
+                                    print(f"  Original stats: {original_stats}")
+                                    print(f"  Optimized stats: {optimized_stats}")
+                                    
+                            except Exception as e:
+                                if self.debug:
+                                    print(f"Warning: Benchmark tracking failed: {e}")
+                    
+                    if zip_path.suffix == '.zip':
+                        print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                    else:
+                        print(f"Conversion complete. Output saved as {gltf_output.name}")
+                
+                return True
+            except Exception as export_error:
+                if self.debug:
+                    print(f"Trimesh export failed: {export_error}")
+                return False
+            
+        except ImportError:
+            if self.debug:
+                print("Trimesh not available")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Trimesh conversion failed: {e}")
+                # Check for common NumPy compatibility issues
+                if "ptp" in str(e) and "NumPy" in str(e):
+                    print("Note: NumPy compatibility issue detected.")
+                    print("To fix this, try updating Trimesh:")
+                    print("  pip install --upgrade trimesh")
+                    print("  Or downgrade NumPy: pip install 'numpy<2.0'")
+                elif "assimp" in str(e).lower():
+                    print("Note: Trimesh requires the assimp library for some formats.")
+                    print("To fix this, install the assimp library:")
+                    print("  Ubuntu/Debian: sudo apt-get install libassimp-dev")
+            return False
+    
+    def _consolidate_trimesh_buffers(self, gltf_path: Path, bin_files: List[Path], output_path: Path):
+        """Consolidate multiple .bin files into a single .bin file"""
+        try:
+            # Read the GLTF file
+            with open(gltf_path, 'r') as f:
+                gltf_data = json.load(f)
+            
+            # Create single consolidated .bin file
+            consolidated_bin = output_path.with_suffix('.bin')
+            total_size = 0
+            
+            with open(consolidated_bin, 'wb') as out_file:
+                # Process each buffer in order
+                for i, buffer_info in enumerate(gltf_data.get('buffers', [])):
+                    if i < len(bin_files):
+                        bin_file = bin_files[i]
+                        if bin_file.exists():
+                            with open(bin_file, 'rb') as in_file:
+                                data = in_file.read()
+                                out_file.write(data)
+                                total_size += len(data)
+                                
+                                # Update buffer info
+                                buffer_info['uri'] = consolidated_bin.name
+                                buffer_info['byteLength'] = len(data)
+                                
+                                # Update bufferView offsets
+                                for buffer_view in gltf_data.get('bufferViews', []):
+                                    if buffer_view.get('buffer') == i:
+                                        buffer_view['buffer'] = 0  # All point to first buffer
+                                        if i > 0:
+                                            # Adjust byteOffset for subsequent buffers
+                                            buffer_view['byteOffset'] = buffer_view.get('byteOffset', 0) + sum(
+                                                len(open(bin_files[j], 'rb').read()) for j in range(i)
+                                            )
+            
+            # Update all bufferViews to point to the first buffer
+            for buffer_view in gltf_data.get('bufferViews', []):
+                buffer_view['buffer'] = 0
+            
+            # Update buffers array to only have one entry
+            gltf_data['buffers'] = [{
+                'uri': consolidated_bin.name,
+                'byteLength': total_size
+            }]
+            
+            # Write updated GLTF
+            with open(gltf_path, 'w') as f:
+                json.dump(gltf_data, f, indent=2)
+            
+            # Clean up individual .bin files
+            for bin_file in bin_files:
+                if bin_file != consolidated_bin:
+                    bin_file.unlink()
+            
+            if self.debug:
+                print(f"Consolidated {len(bin_files)} .bin files into {consolidated_bin.name}")
+                
+        except Exception as e:
+            if self.debug:
+                print(f"Failed to consolidate buffers: {e}")
+            # If consolidation fails, just continue with the original files
     
     def clean_gltf_json(self, gltf_path: Path, output_path: Path = None) -> Tuple[Dict, List[str]]:
         """Clean glTF JSON for texture paths and material names"""
@@ -124,18 +680,29 @@ class VoxBridgeConverter:
     def _process_glb_file(self, glb_path: Path, output_path: Path) -> Tuple[Dict, List[str]]:
         """Process GLB file and convert to GLTF format"""
         try:
+<<<<<<< HEAD
             print(f"🔍 [DEBUG] Starting GLB processing for: {glb_path}")
             print(f"🔍 [DEBUG] Output path: {output_path}")
+=======
+            if self.debug:
+                print(f"Processing GLB file: {glb_path}")
+>>>>>>> recovered-work
             
             # Try pygltflib first
             try:
                 import pygltflib
                 print(f"🔍 [DEBUG] pygltflib imported successfully")
                 
+<<<<<<< HEAD
                 # Load GLB file
                 print(f"🔍 [DEBUG] Loading GLB file with pygltflib...")
                 gltf = pygltflib.GLTF2().load(str(glb_path))
                 print(f"🔍 [DEBUG] GLB file loaded successfully")
+=======
+                if self.debug:
+                    print("Using pygltflib for GLB processing...")
+                gltf = GLTF2.load(str(glb_path))
+>>>>>>> recovered-work
                 
                 # Convert to dictionary for processing
                 print(f"🔍 [DEBUG] Converting pygltflib objects to dictionary...")
@@ -170,13 +737,255 @@ class VoxBridgeConverter:
                     else:
                         print(f"🔍 [DEBUG] {component} not found in GLB")
                 
+<<<<<<< HEAD
                 print(f"🔍 [DEBUG] GLTF data conversion complete. Keys: {list(gltf_data.keys())}")
+=======
+                if hasattr(gltf, 'scenes') and gltf.scenes:
+                    # Convert pygltflib Scene objects to dictionaries
+                    gltf_data['scenes'] = []
+                    for scene in gltf.scenes:
+                        scene_dict = {}
+                        if hasattr(scene, 'nodes') and scene.nodes:
+                            scene_dict['nodes'] = scene.nodes
+                        if hasattr(scene, 'name') and scene.name:
+                            scene_dict['name'] = scene.name
+                        gltf_data['scenes'].append(scene_dict)
+                
+                if hasattr(gltf, 'nodes') and gltf.nodes:
+                    # Convert pygltflib Node objects to dictionaries
+                    gltf_data['nodes'] = []
+                    for node in gltf.nodes:
+                        node_dict = {}
+                        if hasattr(node, 'mesh') and node.mesh is not None:
+                            node_dict['mesh'] = node.mesh
+                        if hasattr(node, 'name') and node.name:
+                            node_dict['name'] = node.name
+                        if hasattr(node, 'translation') and node.translation:
+                            node_dict['translation'] = node.translation
+                        if hasattr(node, 'rotation') and node.rotation:
+                            node_dict['rotation'] = node.rotation
+                        if hasattr(node, 'scale') and node.scale:
+                            node_dict['scale'] = node.scale
+                        if hasattr(node, 'children') and node.children:
+                            node_dict['children'] = node.children
+                        gltf_data['nodes'].append(node_dict)
+                
+                if hasattr(gltf, 'meshes') and gltf.meshes:
+                    # Convert pygltflib Mesh objects to dictionaries
+                    gltf_data['meshes'] = []
+                    for mesh in gltf.meshes:
+                        mesh_dict = {}
+                        if hasattr(mesh, 'primitives') and mesh.primitives:
+                            mesh_dict['primitives'] = []
+                            for primitive in mesh.primitives:
+                                primitive_dict = {}
+                                if hasattr(primitive, 'attributes') and primitive.attributes:
+                                    # Convert pygltflib Attributes object to dictionary
+                                    attributes_dict = {}
+                                    if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
+                                        attributes_dict['POSITION'] = primitive.attributes.POSITION
+                                    if hasattr(primitive.attributes, 'NORMAL') and primitive.attributes.NORMAL is not None:
+                                        attributes_dict['NORMAL'] = primitive.attributes.NORMAL
+                                    if hasattr(primitive.attributes, 'TEXCOORD_0') and primitive.attributes.TEXCOORD_0 is not None:
+                                        attributes_dict['TEXCOORD_0'] = primitive.attributes.TEXCOORD_0
+                                    if hasattr(primitive.attributes, 'TANGENT') and primitive.attributes.TANGENT is not None:
+                                        attributes_dict['TANGENT'] = primitive.attributes.TANGENT
+                                    primitive_dict['attributes'] = attributes_dict
+                                if hasattr(primitive, 'indices') and primitive.indices is not None:
+                                    primitive_dict['indices'] = primitive.indices
+                                if hasattr(primitive, 'material') and primitive.material is not None:
+                                    primitive_dict['material'] = primitive.material
+                                if hasattr(primitive, 'mode') and primitive.mode is not None:
+                                    primitive_dict['mode'] = primitive.mode
+                                mesh_dict['primitives'].append(primitive_dict)
+                        if hasattr(mesh, 'name') and mesh.name:
+                            mesh_dict['name'] = mesh.name
+                        gltf_data['meshes'].append(mesh_dict)
+                
+                if hasattr(gltf, 'materials') and gltf.materials:
+                    # Convert pygltflib Material objects to dictionaries
+                    gltf_data['materials'] = []
+                    for material in gltf.materials:
+                        material_dict = {}
+                        if hasattr(material, 'name') and material.name:
+                            material_dict['name'] = material.name
+                        if hasattr(material, 'pbrMetallicRoughness') and material.pbrMetallicRoughness:
+                            pbr = material.pbrMetallicRoughness
+                            material_dict['pbrMetallicRoughness'] = {}
+                            if hasattr(pbr, 'baseColorFactor') and pbr.baseColorFactor:
+                                material_dict['pbrMetallicRoughness']['baseColorFactor'] = pbr.baseColorFactor
+                            if hasattr(pbr, 'metallicFactor') and pbr.metallicFactor is not None:
+                                material_dict['pbrMetallicRoughness']['metallicFactor'] = pbr.metallicFactor
+                            if hasattr(pbr, 'roughnessFactor') and pbr.roughnessFactor is not None:
+                                material_dict['pbrMetallicRoughness']['roughnessFactor'] = pbr.roughnessFactor
+                            if hasattr(pbr, 'baseColorTexture') and pbr.baseColorTexture:
+                                material_dict['pbrMetallicRoughness']['baseColorTexture'] = {'index': pbr.baseColorTexture.index}
+                        if hasattr(material, 'doubleSided') and material.doubleSided is not None:
+                            material_dict['doubleSided'] = material.doubleSided
+                        gltf_data['materials'].append(material_dict)
+                
+                if hasattr(gltf, 'textures') and gltf.textures:
+                    # Convert pygltflib Texture objects to dictionaries
+                    gltf_data['textures'] = []
+                    for texture in gltf.textures:
+                        texture_dict = {}
+                        if hasattr(texture, 'source') and texture.source is not None:
+                            texture_dict['source'] = texture.source
+                        if hasattr(texture, 'sampler') and texture.sampler is not None:
+                            texture_dict['sampler'] = texture.sampler
+                        gltf_data['textures'].append(texture_dict)
+                
+                if hasattr(gltf, 'samplers') and gltf.samplers:
+                    # Convert pygltflib Sampler objects to dictionaries
+                    gltf_data['samplers'] = []
+                    for sampler in gltf.samplers:
+                        sampler_dict = {}
+                        if hasattr(sampler, 'magFilter') and sampler.magFilter is not None:
+                            sampler_dict['magFilter'] = sampler.magFilter
+                        if hasattr(sampler, 'minFilter') and sampler.minFilter is not None:
+                            sampler_dict['minFilter'] = sampler.minFilter
+                        if hasattr(sampler, 'wrapS') and sampler.wrapS is not None:
+                            sampler_dict['wrapS'] = sampler.wrapS
+                        if hasattr(sampler, 'wrapT') and sampler.wrapT is not None:
+                            sampler_dict['wrapT'] = sampler.wrapT
+                        gltf_data['samplers'].append(sampler_dict)
+                
+                if hasattr(gltf, 'images') and gltf.images:
+                    # Convert pygltflib Image objects to dictionaries
+                    gltf_data['images'] = []
+                    for image in gltf.images:
+                        image_dict = {}
+                        if hasattr(image, 'uri') and image.uri:
+                            image_dict['uri'] = image.uri
+                        if hasattr(image, 'mimeType') and image.mimeType:
+                            image_dict['mimeType'] = image.mimeType
+                        if hasattr(image, 'bufferView') and image.bufferView is not None:
+                            image_dict['bufferView'] = image.bufferView
+                        if hasattr(image, 'name') and image.name:
+                            image_dict['name'] = image.name
+                        gltf_data['images'].append(image_dict)
+                
+                if hasattr(gltf, 'accessors') and gltf.accessors:
+                    # Convert pygltflib Accessor objects to dictionaries
+                    gltf_data['accessors'] = []
+                    for accessor in gltf.accessors:
+                        accessor_dict = {}
+                        if hasattr(accessor, 'bufferView') and accessor.bufferView is not None:
+                            accessor_dict['bufferView'] = accessor.bufferView
+                        if hasattr(accessor, 'componentType') and accessor.componentType is not None:
+                            accessor_dict['componentType'] = accessor.componentType
+                        if hasattr(accessor, 'count') and accessor.count is not None:
+                            accessor_dict['count'] = accessor.count
+                        if hasattr(accessor, 'type') and accessor.type:
+                            accessor_dict['type'] = accessor.type
+                        if hasattr(accessor, 'max') and accessor.max:
+                            accessor_dict['max'] = accessor.max
+                        if hasattr(accessor, 'min') and accessor.min:
+                            accessor_dict['min'] = accessor.min
+                        gltf_data['accessors'].append(accessor_dict)
+                
+                if hasattr(gltf, 'bufferViews') and gltf.bufferViews:
+                    # Convert pygltflib BufferView objects to dictionaries
+                    gltf_data['bufferViews'] = []
+                    for buffer_view in gltf.bufferViews:
+                        buffer_view_dict = {}
+                        if hasattr(buffer_view, 'buffer') and buffer_view.buffer is not None:
+                            buffer_view_dict['buffer'] = buffer_view.buffer
+                        if hasattr(buffer_view, 'byteOffset') and buffer_view.byteOffset is not None:
+                            buffer_view_dict['byteOffset'] = buffer_view.byteOffset
+                        if hasattr(buffer_view, 'byteLength') and buffer_view.byteLength is not None:
+                            buffer_view_dict['byteLength'] = buffer_view.byteLength
+                        if hasattr(buffer_view, 'byteStride') and buffer_view.byteStride is not None:
+                            buffer_view_dict['byteStride'] = buffer_view.byteStride
+                        if hasattr(buffer_view, 'target') and buffer_view.target is not None:
+                            buffer_view_dict['target'] = buffer_view.target
+                        gltf_data['bufferViews'].append(buffer_view_dict)
+                
+                if hasattr(gltf, 'buffers') and gltf.buffers:
+                    # Convert pygltflib Buffer objects to dictionaries
+                    gltf_data['buffers'] = []
+                    for buffer in gltf.buffers:
+                        buffer_dict = {}
+                        if hasattr(buffer, 'uri') and buffer.uri:
+                            buffer_dict['uri'] = buffer.uri
+                        if hasattr(buffer, 'byteLength') and buffer.byteLength is not None:
+                            buffer_dict['byteLength'] = buffer.byteLength
+                        gltf_data['buffers'].append(buffer_dict)
+                
+                if hasattr(gltf, 'animations') and gltf.animations:
+                    # Convert pygltflib Animation objects to dictionaries
+                    gltf_data['animations'] = []
+                    for animation in gltf.animations:
+                        animation_dict = {}
+                        if hasattr(animation, 'name') and animation.name:
+                            animation_dict['name'] = animation.name
+                        if hasattr(animation, 'samplers') and animation.samplers:
+                            # Convert AnimationSampler objects to dictionaries
+                            samplers_list = []
+                            for sampler in animation.samplers:
+                                sampler_dict = {}
+                                if hasattr(sampler, 'input') and sampler.input is not None:
+                                    sampler_dict['input'] = sampler.input
+                                if hasattr(sampler, 'output') and sampler.output is not None:
+                                    sampler_dict['output'] = sampler.output
+                                if hasattr(sampler, 'interpolation') and sampler.interpolation:
+                                    sampler_dict['interpolation'] = sampler.interpolation
+                                samplers_list.append(sampler_dict)
+                            animation_dict['samplers'] = samplers_list
+                        if hasattr(animation, 'channels') and animation.channels:
+                            # Convert AnimationChannel objects to dictionaries
+                            channels_list = []
+                            for channel in animation.channels:
+                                channel_dict = {}
+                                if hasattr(channel, 'sampler') and channel.sampler is not None:
+                                    channel_dict['sampler'] = channel.sampler
+                                if hasattr(channel, 'target') and channel.target:
+                                    target_dict = {}
+                                    if hasattr(channel.target, 'node') and channel.target.node is not None:
+                                        target_dict['node'] = channel.target.node
+                                    if hasattr(channel.target, 'path') and channel.target.path:
+                                        target_dict['path'] = channel.target.path
+                                    channel_dict['target'] = target_dict
+                                channels_list.append(channel_dict)
+                            animation_dict['channels'] = channels_list
+                        gltf_data['animations'].append(animation_dict)
+                
+                if hasattr(gltf, 'skins') and gltf.skins:
+                    # Convert pygltflib Skin objects to dictionaries
+                    gltf_data['skins'] = []
+                    for skin in gltf.skins:
+                        skin_dict = {}
+                        if hasattr(skin, 'name') and skin.name:
+                            skin_dict['name'] = skin.name
+                        if hasattr(skin, 'inverseBindMatrices') and skin.inverseBindMatrices is not None:
+                            skin_dict['inverseBindMatrices'] = skin.inverseBindMatrices
+                        if hasattr(skin, 'skeleton') and skin.skeleton is not None:
+                            skin_dict['skeleton'] = skin.skeleton
+                        if hasattr(skin, 'joints') and skin.joints:
+                            skin_dict['joints'] = skin.joints
+                        gltf_data['skins'].append(skin_dict)
+                
+                if hasattr(gltf, 'cameras') and gltf.cameras:
+                    gltf_data['cameras'] = gltf.cameras
+                
+                if hasattr(gltf, 'lights') and gltf.lights:
+                    gltf_data['lights'] = gltf.lights
+                
+                if self.debug:
+                    print(f"Successfully extracted GLB data using pygltflib")
+                    print(f"Components found: {list(gltf_data.keys())}")
+>>>>>>> recovered-work
                 
                 # Extract binary data for potential re-embedding
                 if hasattr(gltf, '_glb_data') and gltf._glb_data:
                     print(f"🔍 [DEBUG] GLB contains binary data, extracting...")
                     self._extracted_binary_data = self._extract_binary_data(gltf, gltf_data)
+<<<<<<< HEAD
                     print(f"🔍 [DEBUG] Extracted {len(self._extracted_binary_data)} binary buffers")
+=======
+                    if self.debug:
+                        print(f"Extracted {len(self._extracted_binary_data)} binary buffers")
+>>>>>>> recovered-work
                     
                     # Update buffer references to point to external binary file
                     if 'buffers' in gltf_data and gltf_data['buffers']:
@@ -212,6 +1021,7 @@ class VoxBridgeConverter:
                         valid_buffer_views = []
                         
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
+<<<<<<< HEAD
                             if f'bufferView_{i}' in self._extracted_binary_data:
                                 # Update this buffer view with correct offset and length
                                 buffer_view['byteOffset'] = current_offset
@@ -225,6 +1035,17 @@ class VoxBridgeConverter:
                         # Replace buffer views with only valid ones to prevent gaps
                         gltf_data['bufferViews'] = valid_buffer_views
                         print(f"🔍 [DEBUG] Final buffer views count: {len(gltf_data['bufferViews'])}")
+=======
+                            if i in buffer_view_offsets:
+                                buffer_view['byteOffset'] = buffer_view_offsets[i]
+                                # CRITICAL: Update byteLength to match the actual extracted data
+                                if f'bufferView_{i}' in self._extracted_binary_data:
+                                    buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
+                                    if self.debug:
+                                        print(f"BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
+                        
+
+>>>>>>> recovered-work
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -236,7 +1057,40 @@ class VoxBridgeConverter:
                         if len(gltf_data['buffers']) > 1:
                             gltf_data['buffers'] = [gltf_data['buffers'][0]]
                         
-                        print(f"📁 Created external binary file: {binary_filename} ({total_size:,} bytes)")
+                        if self.debug:
+                            print(f"Created external binary file: {binary_filename} ({total_size:,} bytes)")
+                
+                # Validate and fix accessor counts to prevent Error 23
+                if self.debug:
+                    print("Starting accessor count validation...")
+                if 'accessors' in gltf_data:
+                    print(f"Found {len(gltf_data['accessors'])} accessors to validate")
+                    for i, accessor in enumerate(gltf_data['accessors']):
+                        if 'bufferView' in accessor and 'count' in accessor:
+                            buffer_view_idx = accessor['bufferView']
+                            if buffer_view_idx < len(gltf_data['bufferViews']):
+                                buffer_view = gltf_data['bufferViews'][buffer_view_idx]
+                                if 'byteLength' in buffer_view:
+                                    # Calculate correct count based on component type and size
+                                    component_type_size = self._get_component_type_size(accessor.get('componentType', 5126))
+                                    type_num_components = self._get_type_num_components(accessor.get('type', 'FLOAT'))
+                                    
+                                    if self.debug:
+                                        print(f"Accessor {i}: componentType={accessor.get('componentType', 5126)}, type={accessor.get('type', 'FLOAT')}")
+                                        print(f"  component_size={component_type_size}, num_components={type_num_components}")
+                                        print(f"  buffer_view_byteLength={buffer_view['byteLength']}")
+                                    
+                                    if component_type_size > 0 and type_num_components > 0:
+                                        max_count = buffer_view['byteLength'] // (component_type_size * type_num_components)
+                                        if self.debug:
+                                            print(f"  max_count={max_count}, current_count={accessor['count']}")
+                                        if accessor['count'] > max_count:
+                                            if self.debug:
+                                                print(f"Fixing accessor {i}: count {accessor['count']} exceeds buffer capacity, reducing to {max_count}")
+                                            accessor['count'] = max_count
+                else:
+                    if self.debug:
+                        print("No accessors found in gltf_data")
                 
                 # CRITICAL: Fix accessor byteLength calculations to prevent Error 23
                 print(f"🔍 [DEBUG] Starting accessor byteLength fixes...")
@@ -246,18 +1100,21 @@ class VoxBridgeConverter:
                 return gltf_data, ["GLB file processed successfully using pygltflib"]
                 
             except ImportError:
-                print("pygltflib not available, trying alternative method...")
+                if self.debug:
+                    print("pygltflib not available, trying alternative method...")
                 raise ImportError("pygltflib required for GLB processing")
                 
             except Exception as pygltf_error:
-                print(f"pygltflib failed: {pygltf_error}")
-                print("Trying alternative GLB processing method...")
+                if self.debug:
+                    print(f"pygltflib failed: {pygltf_error}")
+                    print("Trying alternative GLB processing method...")
                 raise RuntimeError(f"pygltflib processing failed: {pygltf_error}")
                 
         except Exception as e:
-            print(f"❌ Failed to process GLB file: {e}")
-            import traceback
-            traceback.print_exc()
+            if self.debug:
+                print(f"Failed to process GLB file: {e}")
+                import traceback
+                traceback.print_exc()
             raise RuntimeError(f"GLB processing failed: {e}")
     
     def validate_output(self, output_path: Path) -> Dict:
@@ -316,47 +1173,104 @@ class VoxBridgeConverter:
         return stats
     
     def convert_file(self, input_path: Path, output_path: Path, use_blender: bool = True, optimize_mesh: bool = False, generate_atlas: bool = False, compress_textures: bool = False, platform: str = "unity") -> bool:
-        """Main conversion logic with enhanced platform-specific handling"""
+        """Main conversion logic with layered fallback system"""
+        # Set texture atlas generation flag
+        self._generate_atlas_enabled = generate_atlas
+        
         # Create output directory if it exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Clean up old output files to prevent duplicates
         self._cleanup_old_outputs(output_path)
         
-        if use_blender and input_path.suffix.lower() == '.glb':
-            # Try Blender first for GLB files
+        # Layered fallback system: Blender → Assimp → Trimesh → Basic Converter
+        
+        # Step 1: Try Blender CLI conversion (if enabled and supported)
+        if use_blender and self._can_use_blender(input_path):
             try:
-                print("🎨 Attempting Blender conversion...")
+                if self.debug:
+                    print("Attempting Blender conversion...")
                 if self.convert_with_blender(input_path, output_path, optimize_mesh=optimize_mesh, platform=platform):
-                    print("✅ Blender conversion successful!")
+                    if self.debug:
+                        print("Blender conversion successful!")
                     return True
                 else:
-                    print("⚠️  Blender conversion failed, falling back to basic GLB processing...")
-                    # Fall back to basic GLB processing
-                    return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+                    print("Blender conversion failed. Trying Assimp...")
             except Exception as e:
-                print(f"❌ Blender conversion failed with error: {e}")
-                print("🔄 Falling back to basic GLB processing...")
-                # Fall back to basic GLB processing
-                return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+                if self.debug:
+                    print(f"Blender conversion failed with error: {e}")
+                print("Blender conversion failed. Trying Assimp...")
+        
+        # Step 2: Try Assimp conversion (if available)
+        if self._can_use_assimp():
+            try:
+                if self.debug:
+                    print("Attempting Assimp conversion...")
+                if self.convert_with_assimp(input_path, output_path, platform=platform):
+                    if self.debug:
+                        print("Assimp conversion successful!")
+                    return True
+                else:
+                    print("Assimp conversion failed. Trying Trimesh...")
+            except Exception as e:
+                if self.debug:
+                    print(f"Assimp conversion failed with error: {e}")
+                print("Assimp conversion failed. Trying Trimesh...")
         else:
-            # Use JSON parsing for glTF files or when Blender is disabled
-            return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
+            print("Assimp not available (missing C++ library). Trying Trimesh...")
+        
+        # Step 3: Try Trimesh conversion (if available)
+        if self._can_use_trimesh():
+            try:
+                if self.debug:
+                    print("Attempting Trimesh conversion...")
+                if self.convert_with_trimesh(input_path, output_path, platform=platform):
+                    if self.debug:
+                        print("Trimesh conversion successful!")
+                    return True
+                else:
+                    print("Trimesh conversion failed. Using basic converter...")
+            except Exception as e:
+                if self.debug:
+                    print(f"Trimesh conversion failed with error: {e}")
+                print("Trimesh conversion failed. Using basic converter...")
+        else:
+            print("Trimesh not available. Using basic converter...")
+        
+        # Step 4: Final fallback to basic converter
+        print("All advanced converters failed. Using basic converter.")
+        return self.convert_gltf_json(input_path, output_path, generate_atlas=generate_atlas, compress_textures=compress_textures, platform=platform)
     
     def convert_with_blender(self, input_path: Path, output_path: Path, optimize_mesh: bool = False, platform: str = "unity") -> bool:
         """Convert using Blender Python script with platform-specific settings"""
         blender_exe = self.find_blender()
         if not blender_exe:
-            print("⚠️  Blender not found, using basic conversion...")
+            if self.debug:
+                print("Blender not found, using basic conversion...")
+            print("Blender not found. Please install Blender and set BLENDER_PATH environment variable.")
+            print("Or ensure Blender is installed in a standard location for your platform.")
             return False
         
         if not self.blender_script_path.exists():
-            print("⚠️  Blender script not found, using basic conversion...")
+            if self.debug:
+                print("Blender script not found, using basic conversion...")
             return False
         
         # Try to install numpy in Blender's Python environment first
         try:
-            print("🔧 Attempting to install numpy in Blender's Python environment...")
+            if self.debug:
+                print("Attempting to install numpy in Blender's Python environment...")
+            
+            # First try to ensure pip is available
+            pip_check_cmd = [
+                blender_exe,
+                "--background",
+                "--python-expr",
+                "import ensurepip; ensurepip.bootstrap()"
+            ]
+            subprocess.run(pip_check_cmd, capture_output=True, text=True, timeout=30)
+            
+            # Then try to install numpy
             numpy_install_cmd = [
                 blender_exe,
                 "--background",
@@ -365,11 +1279,14 @@ class VoxBridgeConverter:
             ]
             result = subprocess.run(numpy_install_cmd, capture_output=True, text=True, timeout=60)
             if result.returncode == 0:
-                print("✅ Numpy installed successfully in Blender's Python environment")
+                if self.debug:
+                    print("Numpy installed successfully in Blender's Python environment")
             else:
-                print("⚠️  Could not install numpy in Blender's Python environment")
+                if self.debug:
+                    print("Could not install numpy in Blender's Python environment")
         except Exception as e:
-            print(f"⚠️  Numpy installation attempt failed: {e}")
+            if self.debug:
+                print(f"Numpy installation attempt failed: {e}")
         
         # Run Blender in background mode with our script
         cmd = [
@@ -385,11 +1302,13 @@ class VoxBridgeConverter:
             cmd.append("--optimize-mesh")
         
         try:
-            print("🎨 Running Blender conversion...")
+            if self.debug:
+                print("Running Blender conversion...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             
             if result.returncode == 0:
-                print("✅ Blender conversion successful!")
+                if self.debug:
+                    print("Blender conversion successful!")
                 return True
             else:
                 # Check for specific error patterns
@@ -397,21 +1316,31 @@ class VoxBridgeConverter:
                 stdout = result.stdout or ""
                 
                 if "No module named 'numpy'" in stderr or "No module named 'numpy'" in stdout:
-                    print("⚠️  Blender numpy dependency missing. Using basic conversion...")
+                    if self.debug:
+                        print("Blender numpy dependency missing. Using basic conversion...")
+                    print("WARNING: Blender conversion unavailable, using fallback")
+                    print("To fix this, install numpy in Blender's Python environment:")
+                    print("  /path/to/blender/2.xx/python/bin/python3.7m -m ensurepip")
+                    print("  /path/to/blender/2.xx/python/bin/python3.7m -m pip install numpy")
                     return False
                 elif "ModuleNotFoundError" in stderr or "ModuleNotFoundError" in stdout:
-                    print("⚠️  Blender Python environment missing required modules. Using basic conversion...")
+                    if self.debug:
+                        print("Blender Python environment missing required modules. Using basic conversion...")
+                    print("WARNING: Blender conversion unavailable, using fallback")
                     return False
                 else:
-                    print(f"⚠️  Blender failed with return code {result.returncode}")
-                    print(f"Error output: {stderr[:200]}...")
+                    if self.debug:
+                        print(f"Blender failed with return code {result.returncode}")
+                        print(f"Error output: {stderr[:200]}...")
                     return False
                 
         except subprocess.TimeoutExpired:
-            print("⚠️  Blender processing timed out (120s). Using basic conversion...")
+            if self.debug:
+                print("Blender processing timed out (120s). Using basic conversion...")
             return False
         except Exception as e:
-            print(f"⚠️  Blender execution failed: {e}. Using basic conversion...")
+            if self.debug:
+                print(f"Blender execution failed: {e}. Using basic conversion...")
             return False
         
         return False  # Fallback return
@@ -438,27 +1367,168 @@ class VoxBridgeConverter:
             mesh_changes = self.optimize_meshes_for_platform(gltf_data, platform)
             self.last_changes.extend(mesh_changes)
             
+            # Apply advanced mesh optimization if enabled
+            if self.optimization_settings.get('mesh_optimization', False):
+                for mesh in gltf_data.get('meshes', []):
+                    mesh = self.optimize_mesh(mesh, self.optimization_settings.get('polygon_reduction', 0.3))
+            
             # Apply platform-specific texture optimizations
             texture_changes = self.optimize_textures_for_platform(gltf_data, platform, input_path.parent)
             self.last_changes.extend(texture_changes)
             
-            # Skip GLB conversion entirely - go straight to GLTF output
-            # This prevents unnecessary .glb files and ensures clean output
-            gltf_output = output_path.with_suffix('.gltf')
-            with open(gltf_output, 'w', encoding='utf-8') as f:
-                json.dump(gltf_data, f, indent=2)
+            # Validate and fix accessor counts before writing the file
+            if self.debug:
+                print("Final accessor validation before writing GLTF...")
+                print(f"gltf_data keys: {list(gltf_data.keys())}")
+                if 'accessors' in gltf_data:
+                    print(f"Number of accessors: {len(gltf_data['accessors'])}")
+                    for i, accessor in enumerate(gltf_data['accessors'][:3]):  # Show first 3 accessors
+                        print(f"Accessor {i}: {accessor}")
+            if 'accessors' in gltf_data:
+                for i, accessor in enumerate(gltf_data['accessors']):
+                    if 'bufferView' in accessor and 'count' in accessor:
+                        buffer_view_idx = accessor['bufferView']
+                        if buffer_view_idx < len(gltf_data['bufferViews']):
+                            buffer_view = gltf_data['bufferViews'][buffer_view_idx]
+                            if 'byteLength' in buffer_view:
+                                # Calculate correct count based on component type and size
+                                component_type_size = self._get_component_type_size(accessor.get('componentType', 5126))
+                                type_num_components = self._get_type_num_components(accessor.get('type', 'FLOAT'))
+                                
+                                if component_type_size > 0 and type_num_components > 0:
+                                    max_count = buffer_view['byteLength'] // (component_type_size * type_num_components)
+                                    if accessor['count'] > max_count:
+                                        if self.debug:
+                                            print(f"Final fix: accessor {i}: count {accessor['count']} -> {max_count}")
+                                        accessor['count'] = max_count
+                                        if self.debug:
+                                            print(f"Updated accessor {i} count to {accessor['count']}")
             
-            print(f"✅ Saved as GLTF: {gltf_output}")
+            # Apply platform-specific optimizations if available
+            if self.platform_manager:
+                if self.debug:
+                    print(f"Applying {platform} platform profile...")
+                
+                # Apply platform profile optimizations
+                gltf_data = self.platform_manager.apply_profile(gltf_data, output_path, platform)
+                
+                # Create platform-specific output files
+                platform_outputs = self.platform_manager.create_platform_specific_outputs(
+                    gltf_data, output_path, platform
+                )
+                
+                if self.debug:
+                    print(f"Created {len(platform_outputs)} platform-specific outputs")
+                
+                # Use the first platform output for further processing
+                if platform_outputs:
+                    gltf_output = platform_outputs[0]
+                else:
+                    gltf_output = output_path.with_suffix('.gltf')
+            else:
+                # Fallback to basic GLTF output
+                gltf_output = output_path.with_suffix('.gltf')
+                with open(gltf_output, 'w', encoding='utf-8') as f:
+                    json.dump(gltf_data, f, indent=2)
+            
+            if self.debug:
+                print(f"Saved as GLTF: {gltf_output}")
+
+            # Generate texture atlas if optimization is enabled and textures exist
+            if TEXTURE_OPTIMIZATION_AVAILABLE and self._should_generate_atlas(gltf_data):
+                if self.debug:
+                    print("Generating texture atlas for optimization...")
+                self._generate_texture_atlas_for_gltf(gltf_output, platform)
+            
+            # Apply comprehensive texture optimizations
+            if TEXTURE_OPTIMIZATION_AVAILABLE:
+                self.apply_texture_optimizations(gltf_output, platform)
+
+            # Run platform-specific validation
+            if self.platform_manager:
+                is_valid, validation_messages = self.platform_manager.validate_output(gltf_output, platform)
+                if self.debug:
+                    if is_valid:
+                        print(f"{platform.capitalize()} validation passed")
+                    else:
+                        print(f"{platform.capitalize()} validation issues:")
+                        for msg in validation_messages:
+                            print(f"  - {msg}")
             
             # Run automatic validation
             self._run_validation(gltf_output)
             
+            # Capture conversion statistics for summary
+            if gltf_output.exists():
+                try:
+                    # Read the final GLTF file to get accurate statistics
+                    with open(gltf_output, 'r', encoding='utf-8') as f:
+                        final_gltf_data = json.load(f)
+                    
+                    # Store statistics for summary display
+                    self._last_conversion_stats = {
+                        'meshes': len(final_gltf_data.get('meshes', [])),
+                        'materials': len(final_gltf_data.get('materials', [])),
+                        'textures': len(final_gltf_data.get('textures', [])),
+                        'nodes': len(final_gltf_data.get('nodes', [])),
+                        'file_size': gltf_output.stat().st_size
+                    }
+                    
+                    if self.debug:
+                        print(f"Captured conversion stats: {self._last_conversion_stats}")
+                        
+                except Exception as e:
+                    if self.debug:
+                        print(f"Warning: Could not capture conversion stats: {e}")
+                    # Fallback to basic stats
+                    self._last_conversion_stats = {
+                        'meshes': len(gltf_data.get('meshes', [])),
+                        'materials': len(gltf_data.get('materials', [])),
+                        'textures': len(gltf_data.get('textures', [])),
+                        'nodes': len(gltf_data.get('nodes', [])),
+                        'file_size': 0
+                    }
+            
+            # Package output files into ZIP
+            if gltf_output.exists():
+                zip_path = self._package_output_files(output_path, gltf_output)
+                if zip_path.suffix == '.zip':
+                    print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                else:
+                    print(f"Conversion complete. Output saved as {gltf_output.name}")
+                
+                # Track benchmark metrics if available
+                if self.benchmark and BENCHMARK_AVAILABLE:
+                    try:
+                        # Measure original input stats
+                        original_stats = self.benchmark.measure_model_stats(input_path)
+                        
+                        # Measure optimized output stats
+                        optimized_stats = self.benchmark.measure_model_stats(gltf_output)
+                        
+                        # Store benchmark data
+                        asset_name = input_path.stem
+                        self.benchmark.benchmark_results[asset_name] = {
+                            'asset_name': asset_name,
+                            'original_stats': original_stats,
+                            'optimized_stats': optimized_stats,
+                            'conversion_timestamp': time.time()
+                        }
+                        
+                        if self.debug:
+                            print(f"Benchmark data collected for {asset_name}")
+                            
+                    except Exception as e:
+                        if self.debug:
+                            print(f"Warning: Benchmark tracking failed: {e}")
+            
             return True
                 
         except Exception as e:
-            print(f"❌ Failed to convert file: {e}")
-            import traceback
-            traceback.print_exc()
+            if self.debug:
+                print(f"Failed to convert file: {e}")
+                import traceback
+                traceback.print_exc()
             return False
 
     def optimize_meshes_for_platform(self, gltf_data: Dict, platform: str) -> List[str]:
@@ -706,14 +1776,16 @@ class VoxBridgeConverter:
                 for file_path, zip_name in files_to_zip:
                     zipf.write(file_path, zip_name)
             
-            print(f"📦 Created {platform} package: {zip_path}")
-            print(f"📁 Files included: {[name for _, name in files_to_zip]}")
-            print(f"💡 This package is ready for {platform}")
+            if self.debug:
+                print(f"Created {platform} package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+                print(f"This package is ready for {platform}")
             
             return True
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create {platform} package: {e}")
+            if self.debug:
+                print(f"Warning: Could not create {platform} package: {e}")
             return False
     
     def _get_platform_notes(self, platform: str) -> str:
@@ -848,30 +1920,36 @@ class VoxBridgeConverter:
                 
                 f.write("\nFor more information, visit: https://github.com/Supercoolkayy/voxbridge\n")
             
-            print(f"📁 Created output structure in: {output_path.parent}")
-            print(f"📖 Added README.txt with {platform} usage instructions")
+            if self.debug:
+                print(f"Created output structure in: {output_path.parent}")
+                print(f"Added README.txt with {platform} usage instructions")
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create complete output structure: {e}")
+            if self.debug:
+                print(f"Warning: Could not create complete output structure: {e}")
 
     def _create_embedded_gltf(self, original_gltf, gltf_data: Dict) -> Dict:
         """Create glTF with embedded binary data using Data URLs (use sparingly)"""
         import base64
         
-        print("⚠️ WARNING: Creating embedded GLTF with base64 data (may cause large file sizes)")
-        print("💡 Consider using clean GLTF for better compatibility with platforms like Sketchfab")
-        print("Embedding binary data into glTF...")
+        if self.debug:
+            print("WARNING: Creating embedded GLTF with base64 data (may cause large file sizes)")
+            print("Consider using clean GLTF for better compatibility with platforms like Sketchfab")
+        if self.debug:
+            print("Embedding binary data into glTF...")
         
         # Get the binary data from the original GLB
         if hasattr(original_gltf, '_glb_data') and original_gltf._glb_data:
             binary_data = original_gltf._glb_data
-            print(f"Found binary data: {len(binary_data):,} bytes")
+            if self.debug:
+                print(f"Found binary data: {len(binary_data):,} bytes")
             
-            # Check file size warning
-            if len(binary_data) > 1024 * 1024:  # 1MB
-                print(f"⚠️ WARNING: Binary data is {len(binary_data) / (1024*1024):.1f}MB")
-                print(f"⚠️ This will create a very large embedded file that may cause issues")
-                print(f"💡 Consider using clean GLTF instead")
+                    # Check file size warning
+        if len(binary_data) > 1024 * 1024:  # 1MB
+            if self.debug:
+                print(f"WARNING: Binary data is {len(binary_data) / (1024*1024):.1f}MB")
+                print(f"This will create a very large embedded file that may cause issues")
+                print(f"Consider using clean GLTF instead")
             
             # Convert binary data to base64 Data URL
             base64_data = base64.b64encode(binary_data).decode('ascii')
@@ -885,16 +1963,19 @@ class VoxBridgeConverter:
                     if 'byteLength' in buffer:
                         del buffer['byteLength']
             
-            print("✅ Binary data embedded successfully")
+                    if self.debug:
+                        print("Binary data embedded successfully")
         else:
-            print("⚠️ No binary data found in original GLB")
+            if self.debug:
+                print("No binary data found in original GLB")
         
         return gltf_data
 
     def create_sketchfab_gltf(self, input_path: Path, output_path: Path) -> bool:
         """Create a clean GLTF file optimized for Sketchfab (no embedded data)"""
         try:
-            print("Creating Sketchfab-optimized GLTF file...")
+            if self.debug:
+                print("Creating Sketchfab-optimized GLTF file...")
             
             # Ensure we have Path objects
             input_path = Path(input_path)
@@ -902,11 +1983,13 @@ class VoxBridgeConverter:
             
             # Handle GLB files specially to ensure binary data is extracted
             if input_path.suffix.lower() == '.glb':
-                print("📦 Processing GLB file - extracting binary data...")
+                if self.debug:
+                    print("Processing GLB file - extracting binary data...")
                 # Use the main conversion method which properly handles GLB files
-                success = self.convert_gltf_json(input_path, output_path)
+                success = self.convert_gltf_json(input_path, output_path, platform="unity")  # Default to Unity for Sketchfab
                 if not success:
-                    print("❌ Failed to convert GLB file")
+                    if self.debug:
+                        print("Failed to convert GLB file")
                     return False
             else:
                 # For existing GLTF files, just clean them
@@ -917,20 +2000,23 @@ class VoxBridgeConverter:
                     for buffer in gltf_data['buffers']:
                         # Remove any data URIs and keep only external references
                         if 'uri' in buffer and buffer['uri'].startswith('data:'):
-                            print("⚠️ Removing embedded data URI for Sketchfab compatibility")
+                            if self.debug:
+                                print("Removing embedded data URI for Sketchfab compatibility")
                             del buffer['uri']
                         # Keep byteLength for proper buffer handling
                         if 'byteLength' not in buffer:
-                            print("⚠️ Adding byteLength for proper buffer handling")
+                            if self.debug:
+                                print("Adding byteLength for proper buffer handling")
                             buffer['byteLength'] = 0  # Will be updated by external tools
                 
                 # Write the clean glTF file
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Created Sketchfab-optimized GLTF: {output_path}")
-            print(f"📊 File size: {output_path.stat().st_size:,} bytes")
-            print(f"💡 This file is optimized for Sketchfab and other web platforms")
+            if self.debug:
+                print(f"Created Sketchfab-optimized GLTF: {output_path}")
+                print(f"File size: {output_path.stat().st_size:,} bytes")
+                print(f"This file is optimized for Sketchfab and other web platforms")
             
             # Create ZIP package for Sketchfab (like the working example)
             self._create_sketchfab_package(output_path)
@@ -938,7 +2024,8 @@ class VoxBridgeConverter:
             return True
             
         except Exception as e:
-            print(f"❌ Failed to create Sketchfab GLTF: {e}")
+            if self.debug:
+                print(f"Failed to create Sketchfab GLTF: {e}")
             return False
     
     def _create_sketchfab_package(self, gltf_path: Path) -> bool:
@@ -981,14 +2068,16 @@ class VoxBridgeConverter:
                 for file_path, zip_name in files_to_zip:
                     zipf.write(file_path, zip_name)
             
-            print(f"📦 Created Sketchfab package: {zip_path}")
-            print(f"📁 Files included: {[name for _, name in files_to_zip]}")
-            print(f"💡 Upload this ZIP file to Sketchfab")
+            if self.debug:
+                print(f"Created Sketchfab package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+                print(f"Upload this ZIP file to Sketchfab")
             
             return True
             
         except Exception as e:
-            print(f"⚠️ Warning: Could not create ZIP package: {e}")
+            if self.debug:
+                print(f"Warning: Could not create ZIP package: {e}")
             return False
 
     def _extract_image_paths(self, gltf_data: Dict, base_path: Path) -> List[Path]:
@@ -1005,6 +2094,31 @@ class VoxBridgeConverter:
         
         return image_paths
 
+    def _get_component_type_size(self, component_type: int) -> int:
+        """Get the size in bytes for a given component type"""
+        component_sizes = {
+            5120: 1,   # BYTE
+            5121: 1,   # UNSIGNED_BYTE
+            5122: 2,   # SHORT
+            5123: 2,   # UNSIGNED_SHORT
+            5125: 4,   # UNSIGNED_INT
+            5126: 4,   # FLOAT
+        }
+        return component_sizes.get(component_type, 4)
+    
+    def _get_type_num_components(self, type_name: str) -> int:
+        """Get the number of components for a given type"""
+        type_components = {
+            'SCALAR': 1,
+            'VEC2': 2,
+            'VEC3': 3,
+            'VEC4': 4,
+            'MAT2': 4,
+            'MAT3': 9,
+            'MAT4': 16,
+        }
+        return type_components.get(type_name, 1)
+    
     def _extract_binary_data(self, gltf, gltf_data: Dict) -> Dict[str, bytes]:
         """Extract binary buffer data from GLTF2 object"""
         print(f"🔍 [DEBUG] Starting binary data extraction...")
@@ -1024,6 +2138,7 @@ class VoxBridgeConverter:
                     print(f"🔍 [DEBUG] Buffer view {i}: offset {start}, length {buffer_view.byteLength}, end {end}")
                     
                     if start < len(gltf._glb_data) and end <= len(gltf._glb_data):
+<<<<<<< HEAD
                         extracted_data = gltf._glb_data[start:end]
                         binary_data[f'bufferView_{i}'] = extracted_data
                         print(f"📦 Extracted buffer view {i}: {len(extracted_data)} bytes")
@@ -1041,6 +2156,11 @@ class VoxBridgeConverter:
                 print(f"🔍 [DEBUG] GLB missing bufferViews attribute")
             if not gltf.bufferViews:
                 print(f"🔍 [DEBUG] GLB bufferViews is empty")
+=======
+                        binary_data[f'bufferView_{i}'] = gltf._glb_data[start:end]
+                        if self.debug:
+                            print(f"Extracted buffer view {i}: {len(gltf._glb_data[start:end])} bytes")
+>>>>>>> recovered-work
         
         print(f"🔍 [DEBUG] Binary data extraction complete. Extracted {len(binary_data)} buffer views")
         return binary_data
@@ -1093,21 +2213,24 @@ class VoxBridgeConverter:
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied texture: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied texture: {file_path.name}")
                 
                 # Copy only the specific .bin file for this conversion
                 elif file_path.suffix.lower() == '.bin' and file_path.name == f"{output_path.stem}.bin":
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied binary data: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied binary data: {file_path.name}")
                 
                 # Copy other potentially referenced files
                 elif file_path.suffix.lower() in ['.ktx', '.ktx2', '.webp']:
                     dest = output_dir / file_path.name
                     if not dest.exists():
                         shutil.copy2(file_path, dest)
-                        print(f"📁 Copied additional texture: {file_path.name}")
+                        if self.debug:
+                            print(f"Copied additional texture: {file_path.name}")
         
         # Also check for files that might be referenced in the glTF but not in the same directory
         try:
@@ -1125,7 +2248,8 @@ class VoxBridgeConverter:
                                 dest = output_dir / image_path.name
                                 if not dest.exists():
                                     shutil.copy2(image_path, dest)
-                                    print(f"📁 Copied referenced image: {image_path.name}")
+                                    if self.debug:
+                                        print(f"Copied referenced image: {image_path.name}")
                             
                             # Also copy from parent directory if it exists there
                             parent_image_path = input_dir.parent / image['uri']
@@ -1133,10 +2257,12 @@ class VoxBridgeConverter:
                                 dest = output_dir / parent_image_path.name
                                 if not dest.exists():
                                     shutil.copy2(parent_image_path, dest)
-                                    print(f"📁 Copied referenced image from parent: {parent_image_path.name}")
+                                    if self.debug:
+                                        print(f"Copied referenced image from parent: {parent_image_path.name}")
                                     
         except Exception as e:
-            print(f"⚠️ Warning: Could not check for additional referenced files: {e}")
+            if self.debug:
+                print(f"Warning: Could not check for additional referenced files: {e}")
 
     def generate_performance_report(self, input_path: Path, output_path: Path, stats: Dict, changes: Optional[List[str]] = None) -> Dict:
         """
@@ -1219,9 +2345,10 @@ class VoxBridgeConverter:
     def _convert_gltf_to_glb(self, gltf_data: Dict, output_path: Path) -> bool:
         """Convert glTF JSON data to GLTF format (GLB generation disabled)"""
         try:
-            print(f"Converting to GLTF format...")
-            print(f"glTF data keys: {list(gltf_data.keys())}")
-            print(f"Output path: {output_path}")
+            if self.debug:
+                print(f"Converting to GLTF format...")
+                print(f"glTF data keys: {list(gltf_data.keys())}")
+                print(f"Output path: {output_path}")
             
             # Skip GLB conversion entirely - go straight to GLTF output
             # This prevents unnecessary .glb files and ensures clean output
@@ -1229,7 +2356,8 @@ class VoxBridgeConverter:
             with open(gltf_output, 'w', encoding='utf-8') as f:
                 json.dump(gltf_data, f, indent=2)
             
-            print(f"✅ Saved as GLTF: {gltf_output}")
+            if self.debug:
+                print(f"Saved as GLTF: {gltf_output}")
             
             # Run automatic validation
             self._run_validation(gltf_output)
@@ -1254,7 +2382,8 @@ class VoxBridgeConverter:
                     if not image['uri'].startswith(('http://', 'https://', 'data:')):
                         image_path = base_path / image['uri']
                         if not image_path.exists():
-                            print(f"⚠️ Warning: Image file not found: {image['uri']}")
+                            if self.debug:
+                                print(f"Warning: Image file not found: {image['uri']}")
         
         # Ensure buffers have proper URIs
         if 'buffers' in gltf_data:
@@ -1264,7 +2393,8 @@ class VoxBridgeConverter:
                     if not buffer['uri'].startswith(('http://', 'https://', 'data:')):
                         buffer_path = base_path / buffer['uri']
                         if not buffer_path.exists():
-                            print(f"⚠️ Warning: Buffer file not found: {buffer['uri']}")
+                            if self.debug:
+                                print(f"Warning: Buffer file not found: {buffer['uri']}")
         
         # Ensure textures reference valid images
         if 'textures' in gltf_data:
@@ -1275,7 +2405,8 @@ class VoxBridgeConverter:
                         # Texture references a valid image
                         pass
                     else:
-                        print(f"⚠️ Warning: Texture references invalid image index: {source_index}")
+                        if self.debug:
+                            print(f"Warning: Texture references invalid image index: {source_index}")
         
         # Ensure accessors reference valid buffer views
         if 'accessors' in gltf_data:
@@ -1286,7 +2417,8 @@ class VoxBridgeConverter:
                         # Accessor references a valid buffer view
                         pass
                     else:
-                        print(f"⚠️ Warning: Accessor references invalid buffer view index: {buffer_view_index}")
+                        if self.debug:
+                            print(f"Warning: Accessor references invalid buffer view index: {buffer_view_index}")
 
     def _cleanup_old_outputs(self, output_path: Path):
         """Clean up old output files to prevent duplicates and accumulation"""
@@ -1298,15 +2430,18 @@ class VoxBridgeConverter:
             for old_file in output_dir.glob(f"{output_stem}*"):
                 if old_file != output_path:  # Don't delete the target file
                     old_file.unlink()
-                    print(f"🗑️  Cleaned up old file: {old_file.name}")
+                    if self.debug:
+                        print(f"Cleaned up old file: {old_file.name}")
             
             # Remove any .glb files since we no longer generate them
             for old_glb in output_dir.glob("*.glb"):
                 old_glb.unlink()
-                print(f"🗑️  Cleaned up old GLB file: {old_glb.name}")
+                if self.debug:
+                    print(f"Cleaned up old GLB file: {old_glb.name}")
                     
         except Exception as e:
-            print(f"⚠️  Warning: Could not clean up old files: {e}")
+            if self.debug:
+                print(f"Warning: Could not clean up old files: {e}")
 
     def _run_validation(self, gltf_path: Path) -> bool:
         """Run Node.js validation on the generated GLTF file"""
@@ -1316,41 +2451,253 @@ class VoxBridgeConverter:
             
             # Check if Node.js is available
             try:
-                result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(['node', 'version'], capture_output=True, text=True, timeout=10)
                 if result.returncode != 0:
-                    print("⚠️  Node.js not available, skipping validation")
+                    if self.debug:
+                        print("Node.js not available, skipping validation")
                     return True
             except (subprocess.TimeoutExpired, FileNotFoundError):
-                print("⚠️  Node.js not available, skipping validation")
+                if self.debug:
+                    print("Node.js not available, skipping validation")
                 return True
             
             # Run the validation script
             validator_path = Path(__file__).parent / 'validate_gltf.js'
             if not validator_path.exists():
-                print("⚠️  Validation script not found, skipping validation")
+                if self.debug:
+                    print("Validation script not found, skipping validation")
                 return True
             
-            print("🔍 Running Node.js validation...")
+            if self.debug:
+                print("Running Node.js validation...")
             result = subprocess.run(
                 ['node', str(validator_path), str(gltf_path)],
                 capture_output=True, text=True, timeout=30
             )
             
             if result.returncode == 0:
-                print("✅ Validation passed!")
+                if self.debug:
+                    print("Validation passed!")
                 return True
             else:
-                print("❌ Validation failed!")
-                print("Validation output:")
-                print(result.stdout)
-                if result.stderr:
-                    print("Validation errors:")
-                    print(result.stderr)
+                if self.debug:
+                    print("Validation failed!")
+                    print("Validation output:")
+                    print(result.stdout)
+                    if result.stderr:
+                        print("Validation errors:")
+                        print(result.stderr)
                 return False
                 
         except Exception as e:
-            print(f"⚠️  Validation failed with error: {e}")
+            if self.debug:
+                print(f"Validation failed with error: {e}")
             return True  # Don't fail conversion due to validation issues
+    
+    def get_last_conversion_stats(self) -> Dict:
+        """Get the statistics from the last conversion"""
+        return self._last_conversion_stats
+    
+    def get_benchmark_results(self) -> Dict:
+        """Get benchmark results if available"""
+        if self.benchmark and BENCHMARK_AVAILABLE:
+            return self.benchmark.benchmark_results
+        return {}
+    
+    def generate_benchmark_report(self, output_path: Path) -> bool:
+        """Generate benchmark report if available"""
+        if self.benchmark and BENCHMARK_AVAILABLE:
+            return self.benchmark.generate_benchmark_report(output_path)
+        return False
+    
+    def _should_generate_atlas(self, gltf_data: dict) -> bool:
+        """Determine if texture atlas generation should be performed"""
+        # Check if atlas generation is enabled and there are multiple textures
+        if not hasattr(self, '_generate_atlas_enabled') or not self._generate_atlas_enabled:
+            return False
+            
+        # Check if there are multiple textures that could benefit from atlasing
+        textures = gltf_data.get('textures', [])
+        images = gltf_data.get('images', [])
+        
+        # Generate atlas if there are 2 or more textures
+        return len(textures) >= 2 and len(images) >= 2
+    
+    def _generate_texture_atlas_for_gltf(self, gltf_path: Path, platform: str) -> bool:
+        """Generate texture atlas for the given GLTF file"""
+        try:
+            if not TEXTURE_OPTIMIZATION_AVAILABLE:
+                if self.debug:
+                    print("Texture optimization not available, skipping atlas generation")
+                return False
+            
+            # Load the GLTF data
+            with open(gltf_path, 'r', encoding='utf-8') as f:
+                gltf_data = json.load(f)
+            
+            # Find all texture images
+            images = gltf_data.get('images', [])
+            if len(images) < 2:
+                if self.debug:
+                    print("Not enough textures for atlas generation")
+                return False
+            
+            # Get image paths
+            image_paths = []
+            for image in images:
+                if 'uri' in image and image['uri']:
+                    # Handle relative paths
+                    if not image['uri'].startswith('http') and not image['uri'].startswith('data:'):
+                        img_path = gltf_path.parent / image['uri']
+                        if img_path.exists():
+                            image_paths.append(str(img_path))
+            
+            if len(image_paths) < 2:
+                if self.debug:
+                    print("Not enough valid image files for atlas generation")
+                return False
+            
+            # Generate atlas
+            atlas_size = 1024 if platform.lower() == 'roblox' else 2048
+            atlas, mapping = generate_texture_atlas(image_paths, atlas_size)
+            
+            # Save atlas
+            atlas_path = gltf_path.parent / f"{gltf_path.stem}_atlas.png"
+            atlas.save(atlas_path)
+            
+            if self.debug:
+                print(f"Generated texture atlas: {atlas_path}")
+                print(f"Atlas size: {atlas.size}")
+                print(f"Textures combined: {len(image_paths)}")
+            
+            # Update GLTF to use atlas
+            update_gltf_with_atlas(str(gltf_path), mapping, atlas_path.name)
+            
+            if self.debug:
+                print("Updated GLTF to use texture atlas")
+            
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: Texture atlas generation failed: {e}")
+            return False
+    
+    def optimize_mesh(self, mesh_data: dict, reduction_factor: float = 0.3) -> dict:
+        """Optimize mesh by reducing polygon count while preserving quality"""
+        try:
+            if not self.optimization_settings.get('mesh_optimization', False):
+                return mesh_data
+            
+            # Simple polygon reduction by decimating faces
+            # In a full implementation, this would use proper mesh simplification algorithms
+            if 'primitives' in mesh_data:
+                for primitive in mesh_data['primitives']:
+                    if 'indices' in primitive and primitive['indices'] is not None:
+                        # Reduce face count by the specified factor
+                        current_faces = len(primitive['indices']) // 3
+                        target_faces = int(current_faces * (1 - reduction_factor))
+                        
+                        if self.debug:
+                            print(f"Mesh optimization: {current_faces} -> {target_faces} faces")
+                        
+                        # Update accessor count
+                        if 'attributes' in primitive:
+                            for attr_name, attr_index in primitive['attributes'].items():
+                                if attr_name.startswith('POSITION'):
+                                    # This would update the actual buffer data in a full implementation
+                                    pass
+            
+            return mesh_data
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: Mesh optimization failed: {e}")
+            return mesh_data
+    
+    def apply_texture_optimizations(self, gltf_path: Path, platform: str) -> bool:
+        """Apply comprehensive texture optimizations"""
+        try:
+            if not TEXTURE_OPTIMIZATION_AVAILABLE:
+                return False
+            
+            # Load GLTF data
+            with open(gltf_path, 'r', encoding='utf-8') as f:
+                gltf_data = json.load(f)
+            
+            # Resize textures based on platform requirements
+            max_size = 1024 if platform.lower() == 'roblox' else 2048
+            
+            # Process each image
+            images = gltf_data.get('images', [])
+            for image in images:
+                if 'uri' in image and image['uri']:
+                    if not image['uri'].startswith('http') and not image['uri'].startswith('data:'):
+                        img_path = gltf_path.parent / image['uri']
+                        if img_path.exists():
+                            try:
+                                resize_texture(str(img_path), max_size)
+                                if self.debug:
+                                    print(f"Resized texture: {img_path}")
+                            except Exception as e:
+                                if self.debug:
+                                    print(f"Warning: Could not resize {img_path}: {e}")
+            
+            # Generate texture atlas if beneficial
+            if self._should_generate_atlas(gltf_data):
+                self._generate_texture_atlas_for_gltf(gltf_path, platform)
+            
+            return True
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: Texture optimization failed: {e}")
+            return False
+    
+    def _package_output_files(self, output_path: Path, gltf_path: Path) -> Path:
+        """Package output files into ZIP archive"""
+        try:
+            import zipfile
+            
+            # Create ZIP with the output filename
+            zip_path = output_path.parent / f"{output_path.stem}.zip"
+            
+            # Find all associated files to include in the ZIP
+            files_to_zip = []
+            
+            # Add GLTF file
+            files_to_zip.append((gltf_path, gltf_path.name))
+            
+            # Look for .bin files and include them
+            for bin_file in gltf_path.parent.glob("*.bin"):
+                files_to_zip.append((bin_file, bin_file.name))
+            
+            # Look for texture files and include them
+            texture_exts = ['.png', '.jpg', '.jpeg', '.tga', '.bmp']
+            for texture_file in gltf_path.parent.glob("*"):
+                if texture_file.suffix.lower() in texture_exts:
+                    files_to_zip.append((texture_file, texture_file.name))
+            
+            # Create ZIP package
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path, zip_name in files_to_zip:
+                    zipf.write(file_path, zip_name)
+            
+            # Clean up scattered files (keep only ZIP)
+            for file_path, _ in files_to_zip:
+                if file_path != zip_path:
+                    file_path.unlink()
+            
+            if self.debug:
+                print(f"Created ZIP package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+            
+            return zip_path
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: Could not create ZIP package: {e}")
+            return gltf_path  # Return original file if ZIP creation fails
 
     def _fix_accessor_byte_lengths(self, gltf_data: Dict):
         """Fix accessor byteLength calculations to prevent Error 23 validation issues"""

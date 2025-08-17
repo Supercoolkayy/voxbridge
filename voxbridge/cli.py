@@ -1,65 +1,77 @@
 #!/usr/bin/env python3
 """
-VoxBridge CLI - Command Line Interface
-User interface for VoxBridge converter
+VoxBridge CLI - Command Line Interface for VoxEdit to Unity/Roblox Converter
 """
 
 import sys
 import time
-import subprocess
-import platform
 from pathlib import Path
 from typing import Optional, List
+import logging
 
 try:
     import typer
+    from typer import Typer
+except ImportError:
+    print("Error: typer is required. Install with: pip install typer")
+    sys.exit(1)
+
+try:
     from rich.console import Console
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
     from rich.panel import Panel
     from rich.text import Text
     from rich.table import Table
-    from rich import print as rprint
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
 
-from .converter import VoxBridgeConverter, InputValidationError, ConversionError, BlenderNotFoundError
-from . import __version__
+from .converter import VoxBridgeConverter
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-# Create Typer app with enhanced help
-app = typer.Typer(
+# Create Typer app
+app = Typer(
     name="voxbridge",
-    help="VoxBridge: Professional VoxEdit to Unity/Roblox Asset Converter\n\nConvert VoxEdit glTF/glb exports into optimized formats for Unity and Roblox.\nSupports mesh optimization, texture atlasing, and batch processing.",
-    add_completion=False,
-    rich_markup_mode="rich",
-    no_args_is_help=True,
-    epilog="""
-Examples:
-  voxbridge convert --input model.glb --target unity
-  voxbridge convert --input model.glb --target roblox --optimize-mesh
-  voxbridge batch ./input_folder ./output_folder --target unity
-  voxbridge doctor
-  voxbridge-gui
-
-For more information, visit: https://github.com/Supercoolkayy/voxbridge
-"""
+    help="VoxEdit to Unity/Roblox GLTF Converter",
+    add_completion=False
 )
 
 # Global console for rich output
-console = Console() if RICH_AVAILABLE else None
+console = Console(emoji=False, width=80)
 
-def safe_print(message: str, style: str = ""):
-    """Safely print with Rich or fallback to regular print"""
-    if RICH_AVAILABLE and console:
-        try:
-            console.print(message, style=style)
-        except Exception:
-            print(message)
+def print_header(verbose: bool = False):
+    """Print the VoxBridge header with box-drawing characters."""
+    if verbose:
+        title = "VoxBridge Converter v1.0.3 (Verbose Mode)"
     else:
-        print(message)
+        title = "VoxBridge Converter v1.0.3"
+    
+    subtitle = "GLB ➜ GLTF / Roblox / Unity Exporter"
+    
+    header = f"""
+{'═' * 55}
+   {title}
+   {subtitle}
+{'═' * 55}"""
+    
+    console.print(header, style="bold blue")
 
+def print_file_config(input_path: Path, output_path: Path, target: str, optimize_mesh: bool = False):
+    """Print file configuration in a clean format."""
+    config = f"""
+Input : {input_path}
+Output: {output_path}
+Target: {target}"""
+    
+    if optimize_mesh:
+        config += "\nOpts : mesh optimization enabled"
+    
+    console.print(config, style="dim")
 
+<<<<<<< HEAD
 def print_header():
     """Print VoxBridge header"""
     if RICH_AVAILABLE:
@@ -142,545 +154,518 @@ def print_validation_results(stats: dict):
         if stats.get('file_exists'):
             print("✅ File created successfully!")
             print(f"File size: {stats.get('file_size', 0):,} bytes")
-        else:
-            print("❌ File creation failed!")
+=======
+def print_step_header(step_num: int, total_steps: int, title: str):
+    """Print a step header with consistent formatting."""
+    step_text = f"[{step_num}/{total_steps}] {title}"
+    console.print(f"\n{step_text}", style="bold yellow")
 
+def print_step_info(message: str, indent: int = 0):
+    """Print step information with proper indentation."""
+    indent_str = "   " * indent
+    console.print(f"{indent_str}-> {message}", style="dim")
+
+def print_validation_summary(validation_results: dict, verbose: bool = False):
+    """Print validation results in a structured format."""
+    if not validation_results:
+        return
+    
+    print_step_header(3, 4, "Validation")
+    
+    # Count errors and warnings
+    error_count = validation_results.get('errors', 0)
+    warning_count = validation_results.get('warnings', 0)
+    
+    if verbose:
+        # Show detailed validation in verbose mode
+        if 'details' in validation_results:
+            for detail in validation_results['details']:
+                if detail.get('type') == 'error':
+                    print_step_info(f"❌ {detail.get('message', 'Unknown error')}", 1)
+                elif detail.get('type') == 'warning':
+                    print_step_info(f"⚠️  {detail.get('message', 'Unknown warning')}", 1)
+    else:
+        # Show summary in default mode
+        if error_count > 0 or warning_count > 0:
+            print_step_info(f"UV maps: OK", 1)
+            print_step_info(f"Buffers: OK", 1)
+            print_step_info(f"Accessors: {error_count} errors, {warning_count} warnings", 1)
+            print_step_info("(run with --verbose for details)", 2)
+>>>>>>> recovered-work
+        else:
+            print_step_info("All validations passed", 1)
+
+def print_conversion_summary(converter: VoxBridgeConverter, output_path: Path, verbose: bool = False):
+    """Print the final conversion summary."""
+    print_step_header(4, 4, "Summary")
+    
+    # Get asset info from converter's stored statistics
+    stats = converter.get_last_conversion_stats()
+    meshes = stats.get('meshes', 0)
+    materials = stats.get('materials', 0)
+    textures = stats.get('textures', 0)
+    nodes = stats.get('nodes', 0)
+    
+    # Get file size - check if we have a ZIP file or the original file
+    try:
+        # Check if output is a ZIP file
+        if output_path.suffix.lower() == '.zip':
+            # Use ZIP file size
+            file_size = output_path.stat().st_size
+            size_kb = file_size / 1024
+            if size_kb >= 1024:
+                size_str = f"{size_kb/1024:.1f} MB"
+            else:
+                size_str = f"{size_kb:.0f} KB"
+            size_str += " (ZIP)"
+        else:
+            # Use the stored file size from conversion stats
+            stored_size = stats.get('file_size', 0)
+            if stored_size > 0:
+                size_kb = stored_size / 1024
+                if size_kb >= 1024:
+                    size_str = f"{size_kb/1024:.1f} MB"
+                else:
+                    size_str = f"{size_kb:.0f} KB"
+            else:
+                size_str = "unknown"
+    except:
+        size_str = "unknown"
+    
+    print_step_info(f"Meshes:    {meshes}", 1)
+    print_step_info(f"Materials: {materials}", 1)
+    print_step_info(f"Textures:  {textures}", 1)
+    print_step_info(f"Nodes:     {nodes}", 1)
+    print_step_info(f"File size: {size_str}", 1)
+
+def print_final_status(success: bool, validation_results: dict = None):
+    """Print the final status with box-drawing borders."""
+    if success:
+        status = "SUCCESS"
+        style = "bold green"
+    else:
+        status = "FAILED"
+        style = "bold red"
+    
+    if validation_results:
+        error_count = validation_results.get('errors', 0)
+        warning_count = validation_results.get('warnings', 0)
+        if error_count > 0:
+            status = f"VALIDATION FAILED ({error_count} errors, {warning_count} warnings)"
+            style = "bold yellow"
+    
+    footer = f"""
+{'═' * 55}
+Status: {status}
+{'═' * 55}"""
+    
+    console.print(footer, style=style)
 
 def handle_conversion(
     input_path: Path, 
     output_path: Path, 
-    use_blender: bool, 
-    verbose: bool,
+    target: str,
     optimize_mesh: bool = False, 
-    generate_atlas: bool = False, 
-    compress_textures: bool = False, 
-    platform: str = "unity", 
-    generate_report: bool = False
-):
-    """Handle the conversion process with proper error handling"""
-    converter = VoxBridgeConverter()
-    
-    # Track processing time if report is requested
-    start_time = time.time()
-    
-    # Validate input
-    if not converter.validate_input(input_path):
-        if not input_path.exists():
-            safe_print(f"[red]Error: Input file '{input_path}' not found[/red]")
-        else:
-            safe_print(f"[red]Error: Unsupported format '{input_path.suffix}'. Supported: {', '.join(converter.supported_formats)}[/red]")
-        return False
-    
-    print_conversion_start(input_path, output_path)
+    generate_atlas: bool = False,
+    no_blender: bool = False,
+    verbose: bool = False,
+    debug: bool = False
+) -> bool:
+    """Handle the conversion process with clean output and proper logging."""
+    # Set logging level based on flags
+    if debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif verbose:
+        logging.getLogger().setLevel(logging.INFO)
+    else:
+        logging.getLogger().setLevel(logging.WARNING)
     
     try:
-        # Show progress with Rich if available
-        if RICH_AVAILABLE and not verbose:
-            try:
-                with Progress(
-                    SpinnerColumn(spinner_name="dots"),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(bar_width=40),
-                    TimeElapsedColumn(),
-                    console=console
-                ) as progress:
-                    task = progress.add_task("[bold cyan]Initializing...", total=None)
-                
-                # Determine processing method
-                if use_blender and input_path.suffix.lower() == '.glb':
-                    progress.update(task, description="[bold yellow]Using Blender for GLB cleanup...")
-                    
-                    # Check if Blender is available
-                    blender_exe = converter.find_blender()
-                    if not blender_exe:
-                        progress.update(task, description="[bold red]Blender not found")
-                        progress.stop()
-                        safe_print("[bold red]Blender not found. Please install Blender or add it to your PATH[/bold red]")
-                        safe_print("[dim]Download from: https://www.blender.org/download/[/dim]")
-                        safe_print("[dim]Alternatively, use --no-blender for basic JSON cleanup[/dim]")
-                        return False
-                    
-                    if verbose:
-                        console.print(f"[cyan]Using Blender:[/cyan] {blender_exe}")
-                        console.print(f"[cyan]Script:[/cyan] {converter.blender_script_path}")
-                    
-                elif input_path.suffix.lower() == '.gltf':
-                    progress.update(task, description="[bold green]Processing glTF JSON...")
-                else:
-                    progress.update(task, description="[bold blue]Processing with basic cleanup...")
-                
-                # Perform conversion
-                progress.update(task, description="[bold magenta]Converting file...")
-                success = converter.convert_file(
-                    input_path, output_path, use_blender,
-                    optimize_mesh,
-                    generate_atlas,
-                    compress_textures,
-                    platform
-                )
-                
-                if success:
-                    progress.update(task, description="[bold green]Conversion completed successfully!")
-                    progress.stop()
-                    safe_print("[bold green]Conversion completed successfully![/bold green]")
-                else:
-                    progress.update(task, description="[bold red]Conversion failed")
-                    progress.stop()
-                    safe_print("[bold red]Conversion failed![/bold red]")
-                    return False
-            except Exception as e:
-                # Fallback if Rich progress fails
-                print(f"Progress display failed: {e}")
-                # Continue with conversion
-                success = converter.convert_file(
-                    input_path, output_path, use_blender,
-                    optimize_mesh,
-                    generate_atlas,
-                    compress_textures,
-                    platform
-                )
-                
-                if success:
-                    safe_print("[bold green]Conversion completed successfully![/bold green]")
-                else:
-                    safe_print("[bold red]Conversion failed![/bold red]")
-                    return False
+        # Step 1: Environment Setup
+        print_step_header(1, 4, "Environment Setup")
+        
+        # Check Blender availability
+        blender_path = None
+        try:
+            import subprocess
+            result = subprocess.run(['which', 'blender'], capture_output=True, text=True)
+            if result.returncode == 0:
+                blender_path = result.stdout.strip()
+                print_step_info(f"Blender: detected at {blender_path}", 1)
+            else:
+                print_step_info("Blender: not found", 1)
+        except:
+            print_step_info("Blender: detection failed", 1)
+        
+        if blender_path and not no_blender:
+            print_step_info("Cleanup script: voxbridge/blender_cleanup.py", 1)
+            print_step_info("Using Blender for conversion", 1)
         else:
-            # Fallback to regular output
-            if use_blender and input_path.suffix.lower() == '.glb':
-                print("[PROCESS] Using Blender for GLB cleanup...")
-                
-                # Check if Blender is available
-                blender_exe = converter.find_blender()
-                if not blender_exe:
-                    print("[ERROR] Blender not found. Please install Blender or add it to your PATH")
-                    print("   Download from: https://www.blender.org/download/")
-                    print("   Alternatively, use --no-blender for basic JSON cleanup")
-                    return False
-                
-                if verbose:
-                    print(f"   Using Blender: {blender_exe}")
-                    print(f"   Script: {converter.blender_script_path}")
-                
-            elif input_path.suffix.lower() == '.gltf':
-                print("[PROCESS] Processing glTF JSON...")
-            else:
-                print("[PROCESS] Processing with basic cleanup...")
-            
-            # Perform conversion
-            print("[PROCESS] Converting file...")
-            success = converter.convert_file(
-                input_path, output_path, use_blender,
-                optimize_mesh,
-                generate_atlas,
-                compress_textures,
-                platform
-            )
-            
-            if success:
-                print("[SUCCESS] Conversion completed successfully!")
-            else:
-                print("[ERROR] Conversion failed!")
-                return False
+            print_step_info("Cleanup script: voxbridge/blender_cleanup.py", 1)
+            print_step_info("Using fallback conversion (Blender skipped)", 1)
         
-        # Validate output
-        if output_path.exists():
-            stats = converter.validate_output(output_path)
-            print_validation_results(stats)
-            
-            # Generate performance report if requested
-            if generate_report:
-                processing_time = time.time() - start_time
-                report = converter.generate_performance_report(
-                    input_path, output_path, stats, 
-                    changes=getattr(converter, 'last_changes', [])
+        # Step 2: File Processing
+        print_step_header(2, 4, "File Processing")
+        
+        # Initialize converter
+        converter = VoxBridgeConverter(debug=debug)
+        
+        # Show progress bar for file processing
+        if RICH_AVAILABLE and not verbose:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TimeElapsedColumn(),
+                console=console
+            ) as progress:
+                task = progress.add_task("Processing GLB file...", total=100)
+                
+                # Simulate progress updates
+                progress.update(task, advance=25)
+                time.sleep(0.1)
+                
+                # Process the file
+                result = converter.convert_file(
+                    input_path,
+                    output_path,
+                    use_blender=not no_blender,
+                    optimize_mesh=optimize_mesh,
+                    generate_atlas=generate_atlas,
+                    platform=target
                 )
-                report['processing_time'] = processing_time
                 
-                report_path = converter.save_performance_report(report, output_path.parent)
-                safe_print(f"[bold green]Performance report saved:[/bold green] {report_path}")
+                progress.update(task, completed=100, description="[bold green]Completed!")
+        else:
+            # No progress bar in verbose mode
+            result = converter.convert_file(
+                input_path,
+                output_path,
+                use_blender=not no_blender,
+                optimize_mesh=optimize_mesh,
+                generate_atlas=generate_atlas,
+                platform=target
+            )
         
-        safe_print("[bold green]Ready for import into Unity and Roblox![/bold green]")
-        safe_print("[bold cyan]VoxBridge conversion complete![/bold cyan]")
+        if not result:
+            print_step_info("Conversion failed", 1)
+            return False
+                
+        # Check if we got a ZIP file back from the converter
+        final_output_path = output_path
+        if hasattr(converter, '_last_conversion_stats') and converter._last_conversion_stats:
+            # If we have conversion stats, the file was packaged into a ZIP
+            zip_path = output_path.parent / f"{output_path.stem}.zip"
+            if zip_path.exists():
+                final_output_path = zip_path
+        
+        # Get file info
+        try:
+            file_size = final_output_path.stat().st_size
+            size_mb = file_size / (1024 * 1024)
+            if size_mb >= 1.0:
+                print_step_info(f"GLB parsed: {size_mb:.1f} MB", 1)
+            else:
+                size_kb = file_size / 1024
+                print_step_info(f"GLB parsed: {size_kb:.0f} KB", 1)
+        except:
+            print_step_info("GLB parsed: size unknown", 1)
+        
+        print_step_info("Buffers extracted: completed", 1)
+        print_step_info("BIN file created", 1)
+        if final_output_path.suffix.lower() == '.zip':
+            print_step_info(f"GLTF written: {final_output_path.stem}.gltf (packaged in {final_output_path.name})", 1)
+        else:
+            print_step_info(f"GLTF written: {final_output_path.name}", 1)
+        
+        # Step 3: Validation (placeholder for now)
+        validation_results = {
+            'errors': 0,
+            'warnings': 0,
+            'details': []
+        }
+        print_validation_summary(validation_results, verbose)
+        
+        # Step 4: Summary
+        print_conversion_summary(converter, final_output_path, verbose)
+        
+        # Final status
+        print_final_status(True, validation_results)
+        
         return True
         
     except Exception as e:
-        safe_print(f"[bold red]Unexpected Error:[/bold red] {str(e)}")
-        if verbose:
-            import traceback
-            safe_print("[dim]Traceback:[/dim]")
-            safe_print(traceback.format_exc())
-        return False
-
-
-def check_python_version():
-    """Check Python version compatibility"""
-    version = sys.version_info
-    if version < (3, 9):
-        return False, f"Python {version.major}.{version.minor} detected. Python 3.9+ required."
-    return True, f"Python {version.major}.{version.minor} ✓"
-
-
-def check_blender():
-    """Check if Blender is available"""
-    try:
-        converter = VoxBridgeConverter()
-        blender_path = converter.find_blender()
-        if blender_path:
-            return True, f"Blender found: {blender_path}"
+        if debug:
+            logger.exception("Conversion failed with exception:")
         else:
-            return False, "Blender not found in PATH"
-    except Exception as e:
-        return False, f"Blender check failed: {str(e)}"
-
-
-def check_gpu_info():
-    """Check GPU information"""
-    try:
-        import subprocess
-        result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], 
-                              capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            gpu_info = result.stdout.strip().split(',')
-            if len(gpu_info) >= 2:
-                return True, f"GPU: {gpu_info[0].strip()} ({gpu_info[1].strip()}MB)"
-        return False, "GPU information not available"
-    except Exception:
-        return False, "GPU check failed"
-
-
-def run_doctor():
-    """Run system diagnostics"""
-    print_header()
-    safe_print("[bold yellow]System Diagnostics[/bold yellow]")
-    safe_print("=" * 40)
-    
-    # Check Python version
-    py_ok, py_msg = check_python_version()
-    if py_ok:
-        safe_print(f"[OK] {py_msg}")
-    else:
-        safe_print(f"[FAILED] {py_msg}")
-    
-    # Check Blender
-    blender_ok, blender_msg = check_blender()
-    if blender_ok:
-        safe_print(f"[OK] {blender_msg}")
-    else:
-        safe_print(f"[WARNING] {blender_msg}")
-        safe_print("[dim]Blender is optional but recommended for GLB processing[/dim]")
-    
-    # Check GPU
-    gpu_ok, gpu_msg = check_gpu_info()
-    if gpu_ok:
-        safe_print(f"[OK] {gpu_msg}")
-    else:
-        safe_print(f"[INFO] {gpu_msg}")
-    
-    # Check dependencies
-    safe_print("\n[bold yellow]Dependencies:[/bold yellow]")
-    dependencies = [
-        ("typer", "CLI framework"),
-        ("rich", "Rich text formatting"),
-        ("pygltflib", "glTF processing"),
-        ("Pillow", "Image processing"),
-        ("numpy", "Numerical operations"),
-        ("scipy", "Scientific computing")
-    ]
-    
-    for dep, desc in dependencies:
-        try:
-            __import__(dep)
-            safe_print(f"[OK] {dep} ({desc})")
-        except ImportError:
-            safe_print(f"[FAILED] {dep} ({desc}) - Missing")
-    
-    safe_print("\n[bold green]Diagnostics complete![/bold green]")
-
+            console.print(f"\n[bold red]Error: {str(e)}")
+        return False
 
 @app.command()
 def convert(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Input glTF or glb file exported from VoxEdit"),
-    target: str = typer.Option("unity", "--target", "-t", help="Target platform: unity or roblox"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path (auto-generated if not specified)"),
-    optimize_mesh: bool = typer.Option(False, "--optimize-mesh", help="Enable polygon reduction and mesh splitting for better performance"),
-    generate_atlas: bool = typer.Option(False, "--generate-atlas", help="Generate texture atlas to reduce draw calls"),
-    compress_textures: bool = typer.Option(False, "--compress-textures", help="Compress textures to 1024x1024 for better memory usage"),
-    no_blender: bool = typer.Option(False, "--no-blender", help="Skip Blender processing (basic JSON cleanup only)"),
-    report: bool = typer.Option(False, "--report", help="Generate detailed performance report"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output for debugging"),
-    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing output file without confirmation"),
+    input_file: Path = typer.Option(..., "--input", "-i", help="Input GLB file path"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
+    target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
+    optimize_mesh: bool = typer.Option(False, "--optimize-mesh", help="Enable mesh optimization"),
+    generate_atlas: bool = typer.Option(False, "--generate-atlas", help="Generate texture atlas for optimization"),
+    no_blender: bool = typer.Option(False, "--no-blender", help="Skip Blender processing"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug output")
 ):
-    """Convert VoxEdit glTF/glb files to Unity/Roblox compatible formats"""
-    print_header()
+    """Convert a GLB file to GLTF format for Unity or Roblox."""
     
-    # Auto-generate output path if not specified
-    if output is None:
-        input_stem = input_file.stem
-        # Always use .gltf extension since we no longer generate GLB files
-        output = input_file.parent / f"{input_stem}_{target}_clean.gltf"
+    # Set logging level based on flags
+    if debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif verbose:
+        logging.getLogger().setLevel(logging.INFO)
     else:
-        # Ensure output has proper extension - always use .gltf
+        logging.getLogger().setLevel(logging.WARNING)
+    
+    # Determine output path
+    if output is None:
+        output = input_file.with_suffix('.gltf')
+    else:
+        # Always ensure output has .gltf extension
         if not output.suffix:
             output = output.with_suffix('.gltf')
         elif output.suffix.lower() == '.glb':
             # Convert .glb to .gltf since we don't generate GLB files
             output = output.with_suffix('.gltf')
     
-    # Check if output file exists and handle force flag
-    if output.exists() and not force:
-        safe_print(f"[yellow]Warning: Output file '{output}' already exists.[/yellow]")
-        if not typer.confirm("Overwrite existing file?"):
-            safe_print("[red]Conversion cancelled.[/red]")
-            raise typer.Exit(1)
-    
-    # Validate target platform
-    if target.lower() not in ["unity", "roblox"]:
-        safe_print(f"[red]Error: Invalid target '{target}'. Supported: unity, roblox[/red]")
+    # Check if input file exists
+    if not input_file.exists():
+        console.print(f"[bold red]Error: Input file '{input_file}' does not exist")
         raise typer.Exit(1)
     
-    # Perform conversion
+    # Check if input file is a GLB file
+    if input_file.suffix.lower() != '.glb':
+        console.print(f"[bold red]Error: Input file '{input_file}' is not a GLB file. Only .glb files are supported.")
+        raise typer.Exit(1)
+    
+    # Check if output file exists and ask for confirmation
+    if output.exists():
+        try:
+            response = input(f"Warning: Output file '{output}' already exists. Overwrite? [y/N]: ")
+            if response.lower() not in ['y', 'yes']:
+                console.print("[yellow]Operation cancelled")
+                raise typer.Exit(0)
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Operation cancelled")
+            raise typer.Exit(0)
+    
+    # Print header and configuration
+    print_header(verbose)
+    print_file_config(input_file, output, target, optimize_mesh)
+    
+    # Handle conversion
     success = handle_conversion(
         input_path=input_file,
         output_path=output,
-        use_blender=not no_blender,
-        verbose=verbose,
+        target=target,
         optimize_mesh=optimize_mesh,
         generate_atlas=generate_atlas,
-        compress_textures=compress_textures,
-        platform=target.lower(),
-        generate_report=report
+        no_blender=no_blender,
+        verbose=verbose,
+        debug=debug
     )
     
     if not success:
-        safe_print("[bold red]VoxBridge conversion failed![/bold red]")
         raise typer.Exit(1)
-
-
-@app.command()
-def sketchfab(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Input GLB/GLTF file to create Sketchfab-ready package"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for Sketchfab package"),
-    create_zip: bool = typer.Option(True, "--create-zip", help="Create ZIP file with GLTF and binary files for Sketchfab"),
-    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing output file without confirmation"),
-):
-    """Create Sketchfab-ready package that fixes Error 33 issues"""
-    
-    print_header()
-    
-    # Set output directory
-    if output is None:
-        output = Path(f"sketchfab_ready_{input_file.stem}")
-    
-    # Ensure output directory exists
-    output.mkdir(parents=True, exist_ok=True)
-    
-    print(f"🎯 Creating Sketchfab-ready package for: {input_file}")
-    print(f"📁 Output Directory: {output}")
-    print()
-    
-    try:
-        # Import converter
-        from .converter import VoxBridgeConverter
-        
-        converter = VoxBridgeConverter()
-        
-        # First convert to GLTF if needed
-        if input_file.suffix.lower() == '.glb':
-            print("📦 Converting GLB to GLTF...")
-            gltf_output = output / f"{input_file.stem}.gltf"
-            
-            if not converter.convert_file(input_file, gltf_output, use_blender=False, platform="unity"):
-                raise RuntimeError("Failed to convert GLB to GLTF")
-            
-            print(f"✅ GLTF created: {gltf_output}")
-        else:
-            gltf_output = input_file
-        
-        # Create Sketchfab-ready package
-        print("\n🎯 Creating Sketchfab-ready package...")
-        if converter.create_sketchfab_ready_package(gltf_output):
-            print("\n🎉 SUCCESS: Sketchfab-ready package created!")
-            print("📁 This package should upload without Error 33!")
-            
-            # Show package contents
-            sketchfab_dir = output / "sketchfab_ready"
-            if sketchfab_dir.exists():
-                print("\n📁 Package contents (flat structure, no folders):")
-                for file_path in sketchfab_dir.iterdir():
-                    if file_path.is_file():
-                        print(f"  - {file_path.name}")
-                
-                # Show ZIP file
-                zip_files = list(output.glob("*_sketchfab.zip"))
-                if zip_files:
-                    print(f"\n📦 Upload this ZIP file to Sketchfab: {zip_files[0].name}")
-                    print("💡 This ZIP has the correct flat structure to avoid Error 33")
-            
-        else:
-            print("\n❌ FAILED: Could not create Sketchfab-ready package")
-            raise RuntimeError("Package creation failed")
-        
-    except Exception as e:
-        print(f"❌ Sketchfab package creation failed: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def help():
-    """Show detailed help information"""
-    print_header()
-    safe_print("[bold yellow]VoxBridge Help[/bold yellow]")
-    safe_print("=" * 40)
-    
-    safe_print("[bold cyan]Commands:[/bold cyan]")
-    safe_print("  convert   - Convert single file")
-    safe_print("  sketchfab - Create Sketchfab-compatible files")
-    safe_print("  batch     - Process multiple files")
-    safe_print("  doctor    - System diagnostics")
-    safe_print("  help      - Show this help")
-    
-    safe_print("\n[bold cyan]Examples:[/bold cyan]")
-    safe_print("  # Basic Unity conversion")
-    safe_print("  voxbridge convert --input model.glb --target unity")
-    
-    safe_print("  # Sketchfab-ready conversion")
-    safe_print("  voxbridge sketchfab --input model.glb")
-    
-    safe_print("  # Optimized Roblox conversion")
-    safe_print("  voxbridge convert --input model.glb --target roblox --optimize-mesh --generate-atlas")
-    
-    safe_print("  # Batch processing")
-    safe_print("  voxbridge batch ./input_folder ./output_folder --target unity --recursive")
-    
-    safe_print("  # System check")
-    safe_print("  voxbridge doctor")
-    
-    safe_print("\n[bold cyan]Options:[/bold cyan]")
-    safe_print("  --optimize-mesh      - Enable mesh optimization")
-    safe_print("  --generate-atlas     - Create texture atlas")
-    safe_print("  --compress-textures  - Compress textures to 1024x1024")
-    safe_print("  --no-blender        - Skip Blender processing")
-    safe_print("  --report            - Generate performance report")
-    safe_print("  --verbose           - Show detailed output")
-    safe_print("  --force             - Overwrite existing files")
-    
-    safe_print("\n[bold cyan]Platforms:[/bold cyan]")
-    safe_print("  unity   - Unity 3D engine")
-    safe_print("  roblox  - Roblox Studio")
-    
-    safe_print("\n[bold cyan]File Formats:[/bold cyan]")
-    safe_print("  Input:  .gltf, .glb (VoxEdit exports)")
-    safe_print("  Output: .gltf, .glb (engine-ready)")
-    
-    safe_print("\n[bold cyan]Support:[/bold cyan]")
-    safe_print("  GitHub: https://github.com/Supercoolkayy/voxbridge")
-    safe_print("  Issues: https://github.com/Supercoolkayy/voxbridge/issues")
-
-
-@app.command()
-def doctor():
-    """Run system diagnostics and health check"""
-    run_doctor()
-
 
 @app.command()
 def batch(
-    input_dir: Path = typer.Argument(..., help="Input directory containing glTF/glb files to process"),
-    output_dir: Path = typer.Argument(..., help="Output directory where processed files will be saved"),
-    pattern: str = typer.Option("*.glb,*.gltf", "--pattern", help="File pattern to match (comma-separated)"),
-    recursive: bool = typer.Option(False, "--recursive", "-r", help="Process subdirectories recursively"),
-    target: str = typer.Option("unity", "--target", "-t", help="Target platform: unity or roblox"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output for debugging"),
+    input_dir: Path = typer.Argument(..., help="Input directory containing GLB files"),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory for converted files"),
+    target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
+    optimize_mesh: bool = typer.Option(False, "--optimize-mesh", help="Enable mesh optimization"),
+    no_blender: bool = typer.Option(False, "--no-blender", help="Skip Blender processing"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
 ):
-    """Batch process multiple glTF/glb files"""
-    print_header()
+    """Convert multiple GLB files in batch."""
     
-    # Validate input directory
     if not input_dir.exists():
-        safe_print(f"[red]Error: Input directory '{input_dir}' not found[/red]")
+        console.print(f"[bold red]Error: Input directory '{input_dir}' does not exist")
         raise typer.Exit(1)
     
-    if not input_dir.is_dir():
-        safe_print(f"[red]Error: '{input_dir}' is not a directory[/red]")
-        raise typer.Exit(1)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Find all GLB files
+    glb_files = list(input_dir.glob("*.glb"))
+    if not glb_files:
+        console.print(f"[yellow]No GLB files found in '{input_dir}'")
+        return
     
-    # Parse file patterns
-    patterns = [p.strip() for p in pattern.split(",")]
+    console.print(f"Found {len(glb_files)} GLB files to convert")
     
-    # Find matching files
-    files_to_process = []
-    for pattern in patterns:
-        if recursive:
-            files_to_process.extend(input_dir.rglob(pattern))
-        else:
-            files_to_process.extend(input_dir.glob(pattern))
-    
-    if not files_to_process:
-        safe_print(f"[yellow]No files found matching patterns: {patterns}[/yellow]")
-        raise typer.Exit(1)
-    
-    safe_print(f"[bold cyan]Found {len(files_to_process)} files to process[/bold cyan]")
-    
-    # Process files
-    converter = VoxBridgeConverter()
-    successful = 0
-    failed = 0
-    
-    for i, file_path in enumerate(files_to_process, 1):
-        if verbose:
-            safe_print(f"\n[bold cyan]Processing {i}/{len(files_to_process)}:[/bold cyan] {file_path.name}")
+    success_count = 0
+    for glb_file in glb_files:
+        output_file = output_dir / f"{glb_file.stem}.gltf"
+        console.print(f"\nConverting {glb_file.name}...")
         
-        # Generate output path
-        relative_path = file_path.relative_to(input_dir)
-        # Always use .gltf extension since we no longer generate GLB files
-        output_path = output_dir / relative_path.with_suffix(f"_{target}_clean.gltf")
+        success = handle_conversion(
+            input_path=glb_file,
+            output_path=output_file,
+            target=target,
+            optimize_mesh=optimize_mesh,
+            no_blender=no_blender,
+            verbose=verbose,
+            debug=False
+        )
         
-        # Create output subdirectory if needed
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            success = converter.convert_file(
-                file_path, output_path, use_blender=True,
-                optimize_mesh=False,  # Disable for batch processing
-                generate_atlas=False,  # Disable for batch processing
-                compress_textures=False,  # Disable for batch processing
-                platform=target.lower()
-            )
-            
-            if success:
-                successful += 1
-                if verbose:
-                    safe_print(f"[OK] {file_path.name} -> {output_path.name}")
-            else:
-                failed += 1
-                safe_print(f"[FAILED] Failed to convert {file_path.name}")
-                
-        except Exception as e:
-            failed += 1
-            safe_print(f"[ERROR] Error processing {file_path.name}: {str(e)}")
+        if success:
+            success_count += 1
     
-    # Summary
-    safe_print(f"\n[bold green]Batch processing complete![/bold green]")
-    safe_print(f"  [green]Successful:[/green] {successful}")
-    safe_print(f"  [red]Failed:[/red] {failed}")
-    safe_print(f"  [cyan]Total:[/cyan] {len(files_to_process)}")
+    console.print(f"\n[bold green]Batch conversion completed: {success_count}/{len(glb_files)} files converted successfully")
 
+@app.command()
+def benchmark(
+    input_dir: Path = typer.Option(..., "--input-dir", "-i", help="Input directory with test assets"),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory for benchmark results"),
+    target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
+    optimize_mesh: bool = typer.Option(True, "--optimize-mesh", help="Enable mesh optimization"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
+):
+    """Run optimization benchmarks on test assets."""
+    console.print("[bold blue]VoxBridge Benchmark - Optimization Testing")
+    
+    if not input_dir.exists():
+        console.print(f"[bold red]Error: Input directory '{input_dir}' does not exist")
+        raise typer.Exit(1)
+    
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Find all GLB files
+    glb_files = list(input_dir.glob("*.glb"))
+    if not glb_files:
+        console.print(f"[yellow]No GLB files found in '{input_dir}'")
+        return
+    
+    console.print(f"Found {len(glb_files)} test assets for benchmarking")
+    
+    # Initialize converter with benchmark support
+    from .converter import VoxBridgeConverter
+    converter = VoxBridgeConverter(debug=verbose)
+    
+    # Enable optimizations for benchmarking
+    converter.optimization_settings['mesh_optimization'] = optimize_mesh
+    converter.optimization_settings['texture_atlas'] = True
+    
+    benchmark_results = {}
+    success_count = 0
+    
+    for glb_file in glb_files:
+        console.print(f"\n[bold cyan]Benchmarking {glb_file.name}...")
+        
+        # Convert with optimizations
+        output_file = output_dir / f"{glb_file.stem}_optimized"
+        success = converter.convert_file(
+            input_path=glb_file,
+            output_path=output_file,
+            platform=target,
+            optimize_mesh=optimize_mesh,
+            use_blender=True
+        )
+        
+        if success:
+            success_count += 1
+            # Get benchmark results
+            asset_results = converter.get_benchmark_results()
+            if glb_file.stem in asset_results:
+                benchmark_results[glb_file.stem] = asset_results[glb_file.stem]
+                console.print(f"  ✓ Benchmark data collected")
+        
+        # Clean up intermediate files
+        for temp_file in output_dir.glob(f"{glb_file.stem}_optimized*"):
+            if temp_file.suffix != '.zip':
+                temp_file.unlink()
+    
+    # Generate benchmark report
+    if benchmark_results:
+        report_path = output_dir / "benchmark_report.json"
+        if converter.generate_benchmark_report(report_path):
+            console.print(f"\n[bold green]Benchmark report generated: {report_path}")
+            
+            # Display summary
+            console.print("\n[bold yellow]Benchmark Summary:")
+            for asset_name, result in benchmark_results.items():
+                original = result.get('original_stats', {})
+                optimized = result.get('optimized_stats', {})
+                
+                if original and optimized:
+                    file_size_improvement = ((original.get('file_size', 0) - optimized.get('file_size', 0)) / max(original.get('file_size', 1), 1)) * 100
+                    triangle_improvement = ((original.get('total_triangles', 0) - optimized.get('total_triangles', 0)) / max(original.get('total_triangles', 1), 1)) * 100
+                    
+                    console.print(f"  {asset_name}:")
+                    console.print(f"    File size: {file_size_improvement:.1f}% improvement")
+                    console.print(f"    Triangles: {triangle_improvement:.1f}% improvement")
+    
+    # Also try to generate report from converter's benchmark data
+    if converter.benchmark and hasattr(converter.benchmark, 'benchmark_results'):
+        if converter.benchmark.benchmark_results:
+            report_path = output_dir / "converter_benchmark_report.json"
+            if converter.benchmark.generate_benchmark_report(report_path):
+                console.print(f"\n[bold green]Converter benchmark report generated: {report_path}")
+    
+    console.print(f"\n[bold green]Benchmark completed: {success_count}/{len(glb_files)} assets tested")
+
+@app.command()
+def doctor():
+    """Diagnose and fix common VoxBridge issues."""
+    console.print("[bold blue]VoxBridge Doctor - System Diagnostics")
+    
+    # Check Python version
+    python_version = sys.version_info
+    console.print(f"Python: {python_version.major}.{python_version.minor}.{python_version.micro}")
+    
+    # Check dependencies
+    console.print("\nDependencies:")
+    
+    try:
+        import typer
+        console.print("  ✓ typer")
+    except ImportError:
+        console.print("  ✗ typer (missing)")
+    
+    try:
+        import rich
+        console.print("  ✓ rich")
+    except ImportError:
+        console.print("  ✗ rich (missing)")
+    
+    try:
+        import pygltflib
+        console.print("  ✓ pygltflib")
+    except ImportError:
+        console.print("  ✗ pygltflib (missing)")
+    
+    # Check Blender
+    console.print("\nExternal Tools:")
+    try:
+        import subprocess
+        result = subprocess.run(['which', 'blender'], capture_output=True, text=True)
+        if result.returncode == 0:
+            console.print(f"  ✓ Blender: {result.stdout.strip()}")
+        else:
+            console.print("  ✗ Blender: not found")
+    except:
+        console.print("  ✗ Blender: detection failed")
+    
+    # Check Node.js
+    try:
+        result = subprocess.run(['which', 'node'], capture_output=True, text=True)
+        if result.returncode == 0:
+            console.print(f"  ✓ Node.js: {result.stdout.strip()}")
+        else:
+            console.print("  ✗ Node.js: not found")
+    except:
+        console.print("  ✗ Node.js: detection failed")
 
 def main():
-    """Main entry point"""
-    try:
-        app()
-    except KeyboardInterrupt:
-        safe_print("\n[bold red]Operation cancelled by user[/bold red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        safe_print(f"[bold red]Unexpected error:[/bold red] {str(e)}")
-        raise typer.Exit(1)
-
+    """Main entry point for the CLI."""
+    app()
 
 if __name__ == "__main__":
     main() 

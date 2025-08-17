@@ -54,11 +54,19 @@ class GLTFValidator {
     this.gltfPath = inputPath;
 
     console.log(
+<<<<<<< HEAD
       `${colors.cyan}${colors.bright}🔍 VoxBridge GLTF Validator v1.1${colors.reset}`
     );
     console.log(`${colors.blue}Validating: ${inputPath}${colors.reset}`);
     if (autoFix) {
       console.log(`${colors.yellow}🛠️  Auto-fix mode: ENABLED${colors.reset}`);
+=======
+      `${colors.cyan}${colors.bright}VoxBridge GLTF Validator v1.1${colors.reset}`
+    );
+    console.log(`${colors.blue}Validating: ${inputPath}${colors.reset}`);
+    if (autoFix) {
+      console.log(`${colors.yellow}Auto-fix mode: ENABLED${colors.reset}`);
+>>>>>>> recovered-work
     }
     console.log("");
 
@@ -86,9 +94,12 @@ class GLTFValidator {
       // CRITICAL: Error 23 prevention - Accessor validation and buffer view alignment
       this.validateError23(this.gltfData);
 
+<<<<<<< HEAD
       // CRITICAL: Error 20 prevention - Format corruption and structure validation
       this.validateError20(this.gltfData);
 
+=======
+>>>>>>> recovered-work
       // Generate validation report
       this.generateReport();
 
@@ -100,7 +111,11 @@ class GLTFValidator {
       return this.errors.length === 0;
     } catch (error) {
       console.error(
+<<<<<<< HEAD
         `${colors.red}❌ Validation failed: ${error.message}${colors.reset}`
+=======
+        `${colors.red}Validation failed: ${error.message}${colors.reset}`
+>>>>>>> recovered-work
       );
       return false;
     }
@@ -114,7 +129,11 @@ class GLTFValidator {
     if (!gltf.meshes) return;
 
     console.log(
+<<<<<<< HEAD
       `${colors.cyan}🔍 UV Validation (Error 13 Prevention)${colors.reset}`
+=======
+      `${colors.cyan}UV Validation (Error 13 Prevention)${colors.reset}`
+>>>>>>> recovered-work
     );
 
     gltf.meshes.forEach((mesh, meshIndex) => {
@@ -153,7 +172,11 @@ class GLTFValidator {
               );
             } else {
               console.log(
+<<<<<<< HEAD
                 `  ✅ Mesh ${meshIndex} Primitive ${primitiveIndex}: TEXCOORD_0 present`
+=======
+                `   Mesh ${meshIndex} Primitive ${primitiveIndex}: TEXCOORD_0 present`
+>>>>>>> recovered-work
               );
             }
           }
@@ -171,7 +194,11 @@ class GLTFValidator {
   validateBufferSizes(gltf) {
     if (!gltf.buffers) return;
 
+<<<<<<< HEAD
     console.log(`${colors.cyan}🔍 Buffer Size Validation${colors.reset}`);
+=======
+    console.log(`${colors.cyan}Buffer Size Validation${colors.reset}`);
+>>>>>>> recovered-work
 
     gltf.buffers.forEach((buffer, index) => {
       if (buffer.uri) {
@@ -200,12 +227,20 @@ class GLTFValidator {
                 });
 
                 console.log(
+<<<<<<< HEAD
                   `  🛠️  Auto-fixed buffer ${index} size: ${oldSize} → ${actualSize}`
+=======
+                  `  Auto-fixed buffer ${index} size: ${oldSize} → ${actualSize}`
+>>>>>>> recovered-work
                 );
               }
             } else {
               console.log(
+<<<<<<< HEAD
                 `  ✅ Buffer ${index}: Size matches (${actualSize} bytes)`
+=======
+                `   Buffer ${index}: Size matches (${actualSize} bytes)`
+>>>>>>> recovered-work
               );
             }
           } else {
@@ -219,7 +254,11 @@ class GLTFValidator {
       } else if (buffer.byteLength !== undefined) {
         // Embedded buffer
         console.log(
+<<<<<<< HEAD
           `  ✅ Buffer ${index}: Embedded buffer (${buffer.byteLength} bytes)`
+=======
+          `   Buffer ${index}: Embedded buffer (${buffer.byteLength} bytes)`
+>>>>>>> recovered-work
         );
       }
     });
@@ -317,6 +356,7 @@ class GLTFValidator {
             accessor.min.length !== expectedLength ||
             accessor.max.length !== expectedLength
           ) {
+<<<<<<< HEAD
             // Only report as error if the arrays are non-empty but wrong length
             if (accessor.min.length > 0 || accessor.max.length > 0) {
               this.errors.push(
@@ -328,6 +368,11 @@ class GLTFValidator {
                 `🔍 [DEBUG] Accessor ${index}: Empty min/max bounds (valid)`
               );
             }
+=======
+            this.errors.push(
+              `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type}`
+            );
+>>>>>>> recovered-work
           }
         }
       }
@@ -374,10 +419,14 @@ class GLTFValidator {
         );
       }
 
+<<<<<<< HEAD
       if (
         bufferView.byteStride !== undefined &&
         bufferView.byteStride !== null
       ) {
+=======
+      if (bufferView.byteStride !== undefined) {
+>>>>>>> recovered-work
         if (bufferView.byteStride < 4 || bufferView.byteStride > 252) {
           this.errors.push(
             `BufferView ${index}: Invalid byteStride ${bufferView.byteStride}`
@@ -389,7 +438,10 @@ class GLTFValidator {
           );
         }
       }
+<<<<<<< HEAD
       // Note: byteStride being null or undefined is valid - it means data is tightly packed
+=======
+>>>>>>> recovered-work
     });
   }
 
@@ -600,6 +652,7 @@ class GLTFValidator {
     if (!gltf.accessors || !gltf.bufferViews) return;
 
     console.log(
+<<<<<<< HEAD
       `${colors.cyan}🔍 Error 23 Prevention (Accessor/BufferView Alignment)${colors.reset}`
     );
 
@@ -786,6 +839,92 @@ class GLTFValidator {
     }
 
     console.log("✅ Error 20 prevention checks completed");
+=======
+      `${colors.cyan}Error 23 Prevention (Accessor/BufferView Alignment)${colors.reset}`
+    );
+
+    gltf.accessors.forEach((accessor, index) => {
+      const bufferView = gltf.bufferViews[accessor.bufferView];
+      if (!bufferView) {
+        this.errors.push(
+          `Accessor ${index}: Invalid bufferView reference ${accessor.bufferView}`
+        );
+        return;
+      }
+
+      // Check if accessor type matches bufferView byteStride
+      if (accessor.type !== "SCALAR") {
+        if (bufferView.byteStride !== undefined && bufferView.byteStride < 4) {
+          this.errors.push(
+            `Accessor ${index}: BufferView byteStride too small for ${accessor.type} type`
+          );
+        }
+        if (
+          bufferView.byteStride !== undefined &&
+          bufferView.byteStride % 4 !== 0
+        ) {
+          this.errors.push(
+            `Accessor ${index}: BufferView byteStride must be multiple of 4`
+          );
+        }
+      }
+
+      // Check if accessor byteOffset is within bufferView byteLength
+      if (accessor.byteOffset !== undefined && accessor.byteOffset < 0) {
+        this.errors.push(
+          `Accessor ${index}: Invalid byteOffset ${accessor.byteOffset}`
+        );
+      }
+      if (
+        accessor.byteOffset !== undefined &&
+        bufferView.byteLength !== undefined
+      ) {
+        if (accessor.byteOffset >= bufferView.byteLength) {
+          this.errors.push(
+            `Accessor ${index}: byteOffset ${accessor.byteOffset} exceeds BufferView byteLength ${bufferView.byteLength}`
+          );
+        }
+      }
+
+      // Check if accessor count is consistent with bufferView byteLength
+      if (accessor.count !== undefined && bufferView.byteLength !== undefined) {
+        const componentCount = this.getTypeComponentCount(accessor.type);
+        const componentSize = this.getComponentSize(accessor.componentType);
+
+        if (componentCount > 0 && componentSize > 0) {
+          const maxCount = Math.floor(
+            bufferView.byteLength / (componentCount * componentSize)
+          );
+          if (accessor.count > maxCount) {
+            this.errors.push(
+              `Accessor ${index}: Accessor count ${accessor.count} exceeds BufferView capacity (max: ${maxCount})`
+            );
+          }
+        }
+      }
+
+      // Check if accessor min/max bounds match type
+      if (accessor.type !== "SCALAR") {
+        if (accessor.min && accessor.max) {
+          const expectedLength = this.getTypeComponentCount(accessor.type);
+          if (
+            accessor.min.length !== expectedLength ||
+            accessor.max.length !== expectedLength
+          ) {
+            this.errors.push(
+              `Accessor ${index}: Min/max bounds length mismatch for ${accessor.type}`
+            );
+          }
+        }
+      }
+
+      console.log(
+        `   Accessor ${index}: Type and BufferView alignment checks passed`
+      );
+    });
+
+    console.log("");
+>>>>>>> recovered-work
   }
 
   /**
@@ -794,7 +933,11 @@ class GLTFValidator {
   calculateAccessorByteLength(accessor) {
     const componentCount = this.getTypeComponentCount(accessor.type);
     const componentSize = this.getComponentSize(accessor.componentType);
+<<<<<<< HEAD
     return componentCount * componentSize; // Return bytes per element, not total bytes
+=======
+    return accessor.count * componentCount * componentSize;
+>>>>>>> recovered-work
   }
 
   /**
@@ -834,7 +977,11 @@ class GLTFValidator {
   async applyFixes() {
     if (this.fixes.length === 0) return;
 
+<<<<<<< HEAD
     console.log(`${colors.yellow}🛠️  Applying Auto-Fixes...${colors.reset}`);
+=======
+    console.log(`${colors.yellow}Applying Auto-Fixes...${colors.reset}`);
+>>>>>>> recovered-work
 
     try {
       // Write the updated GLTF data back to file
@@ -842,7 +989,11 @@ class GLTFValidator {
       fs.writeFileSync(this.gltfPath, updatedContent);
 
       console.log(
+<<<<<<< HEAD
         `${colors.green}✅ Auto-fixes applied successfully!${colors.reset}`
+=======
+        `${colors.green} Auto-fixes applied successfully!${colors.reset}`
+>>>>>>> recovered-work
       );
       console.log(
         `${colors.green}📁 Updated file: ${this.gltfPath}${colors.reset}`
@@ -854,7 +1005,11 @@ class GLTFValidator {
       });
     } catch (error) {
       console.error(
+<<<<<<< HEAD
         `${colors.red}❌ Failed to apply auto-fixes: ${error.message}${colors.reset}`
+=======
+        `${colors.red}Failed to apply auto-fixes: ${error.message}${colors.reset}`
+>>>>>>> recovered-work
       );
     }
 
@@ -866,11 +1021,19 @@ class GLTFValidator {
    */
   generateReport() {
     console.log(
+<<<<<<< HEAD
       `${colors.cyan}${colors.bright}📊 VALIDATION REPORT${colors.reset}\n`
     );
 
     // Statistics
     console.log(`${colors.blue}📈 Asset Statistics:${colors.reset}`);
+=======
+      `${colors.cyan}${colors.bright} VALIDATION REPORT${colors.reset}\n`
+    );
+
+    // Statistics
+    console.log(`${colors.blue}Asset Statistics:${colors.reset}`);
+>>>>>>> recovered-work
     console.log(`  • Accessors: ${this.stats.accessors}`);
     console.log(`  • Buffer Views: ${this.stats.bufferViews}`);
     console.log(`  • Buffers: ${this.stats.buffers}`);
@@ -882,7 +1045,11 @@ class GLTFValidator {
     // Errors
     if (this.errors.length > 0) {
       console.log(
+<<<<<<< HEAD
         `${colors.red}❌ ERRORS (${this.errors.length}):${colors.reset}`
+=======
+        `${colors.red}ERRORS (${this.errors.length}):${colors.reset}`
+>>>>>>> recovered-work
       );
       this.errors.forEach((error, index) => {
         console.log(`  ${index + 1}. ${error}`);
@@ -904,7 +1071,11 @@ class GLTFValidator {
     // Fixes applied
     if (this.fixes.length > 0) {
       console.log(
+<<<<<<< HEAD
         `${colors.green}🛠️  AUTO-FIXES APPLIED (${this.fixes.length}):${colors.reset}`
+=======
+        `${colors.green}AUTO-FIXES APPLIED (${this.fixes.length}):${colors.reset}`
+>>>>>>> recovered-work
       );
       this.fixes.forEach((fix, index) => {
         console.log(`  ${index + 1}. ${fix.message}`);
@@ -914,7 +1085,11 @@ class GLTFValidator {
 
     // Final status
     if (this.errors.length === 0) {
+<<<<<<< HEAD
       console.log(`${colors.green}✅ VALIDATION PASSED${colors.reset}`);
+=======
+      console.log(`${colors.green} VALIDATION PASSED${colors.reset}`);
+>>>>>>> recovered-work
       console.log(
         `${colors.green}🎯 This GLTF file is ready for Sketchfab upload!${colors.reset}`
       );
@@ -950,6 +1125,7 @@ class GLTFValidator {
           return true;
         });
 
+<<<<<<< HEAD
       // Check if Error 20 prevention is active
       const hasValidStructure =
         this.errors.length === 0 ||
@@ -957,6 +1133,8 @@ class GLTFValidator {
           (error) => error.includes("Duplicate") || error.includes("corruption")
         );
 
+=======
+>>>>>>> recovered-work
       if (hasUVs) {
         console.log(
           `${colors.green}🛡️  Error 13 prevention: ACTIVE${colors.reset}`
@@ -968,6 +1146,7 @@ class GLTFValidator {
           `${colors.green}🛡️  Error 23 prevention: ACTIVE${colors.reset}`
         );
       }
+<<<<<<< HEAD
 
       if (hasValidStructure) {
         console.log(
@@ -978,6 +1157,12 @@ class GLTFValidator {
       console.log(`${colors.red}❌ VALIDATION FAILED${colors.reset}`);
       console.log(
         `${colors.red}🚫 This GLTF file has issues that may cause upload failures${colors.reset}`
+=======
+    } else {
+      console.log(`${colors.red}VALIDATION FAILED${colors.reset}`);
+      console.log(
+        `${colors.red}This GLTF file has issues that may cause upload failures${colors.reset}`
+>>>>>>> recovered-work
       );
 
       // Check for critical Error 13 issues
@@ -992,12 +1177,20 @@ class GLTFValidator {
           `${colors.red}🚨 This will cause Sketchfab Error 13!${colors.reset}`
         );
         console.log(
+<<<<<<< HEAD
           `${colors.yellow}💡 Fix UV coordinates in Blender before uploading${colors.reset}`
+=======
+          `${colors.yellow}Fix UV coordinates in Blender before uploading${colors.reset}`
+>>>>>>> recovered-work
         );
       }
 
       console.log(
+<<<<<<< HEAD
         `${colors.yellow}💡 Fix the errors above before uploading to Sketchfab${colors.reset}`
+=======
+        `${colors.yellow}Fix the errors above before uploading to Sketchfab${colors.reset}`
+>>>>>>> recovered-work
       );
     }
 
@@ -1017,7 +1210,11 @@ async function main() {
       `${colors.cyan}${colors.bright}VoxBridge GLTF Validator v1.1${colors.reset}`
     );
     console.log(
+<<<<<<< HEAD
       `${colors.blue}Prevents Error 13 (data corruption), Error 20 (format corruption), and Error 23 (accessor validation) issues for Sketchfab uploads${colors.reset}\n`
+=======
+      `${colors.blue}Prevents Error 13 (data corruption) and Error 23 (accessor validation) issues for Sketchfab uploads${colors.reset}\n`
+>>>>>>> recovered-work
     );
     console.log("Usage:");
     console.log("  node validate_gltf.js <input.gltf>");
@@ -1036,9 +1233,12 @@ async function main() {
     console.log(
       "  • Accessor validation and buffer alignment - Critical for Error 23"
     );
+<<<<<<< HEAD
     console.log(
       "  • Format corruption and structure validation - Critical for Error 20"
     );
+=======
+>>>>>>> recovered-work
     console.log("  • Deep accessor type validation");
     console.log("  • Data consistency checks");
     console.log("  • Buffer reference validation");
@@ -1046,7 +1246,10 @@ async function main() {
     console.log("  • Material and texture validation");
     console.log("  • Buffer size auto-fixing");
     console.log("  • Error 13 prevention checks");
+<<<<<<< HEAD
     console.log("  • Error 20 prevention checks");
+=======
+>>>>>>> recovered-work
     console.log("  • Error 23 prevention checks");
     return;
   }
@@ -1056,7 +1259,11 @@ async function main() {
   const inputPath = autoFix ? args[args.indexOf("--fix") + 1] : args[0];
 
   if (!inputPath) {
+<<<<<<< HEAD
     console.error(`${colors.red}❌ No input file specified${colors.reset}`);
+=======
+    console.error(`${colors.red}No input file specified${colors.reset}`);
+>>>>>>> recovered-work
     console.error(
       `${colors.yellow}Usage: node validate_gltf.js [--fix] <input.gltf>${colors.reset}`
     );
@@ -1065,18 +1272,26 @@ async function main() {
 
   // Check if file exists
   if (!fs.existsSync(inputPath)) {
+<<<<<<< HEAD
     console.error(
       `${colors.red}❌ File not found: ${inputPath}${colors.reset}`
     );
+=======
+    console.error(`${colors.red}File not found: ${inputPath}${colors.reset}`);
+>>>>>>> recovered-work
     process.exit(1);
   }
 
   // Validate file extension
   const ext = path.extname(inputPath).toLowerCase();
   if (ext !== ".gltf" && ext !== ".glb") {
+<<<<<<< HEAD
     console.error(
       `${colors.red}❌ Unsupported file type: ${ext}${colors.reset}`
     );
+=======
+    console.error(`${colors.red}Unsupported file type: ${ext}${colors.reset}`);
+>>>>>>> recovered-work
     console.error(
       `${colors.yellow}Supported types: .gltf, .glb${colors.reset}`
     );
@@ -1095,7 +1310,11 @@ async function main() {
 if (require.main === module) {
   main().catch((error) => {
     console.error(
+<<<<<<< HEAD
       `${colors.red}❌ Unexpected error: ${error.message}${colors.reset}`
+=======
+      `${colors.red}Unexpected error: ${error.message}${colors.reset}`
+>>>>>>> recovered-work
     );
     process.exit(1);
   });
