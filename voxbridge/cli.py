@@ -181,6 +181,7 @@ def handle_conversion(
     output_path: Path, 
     target: str,
     optimize_mesh: bool = False, 
+    generate_atlas: bool = False,
     no_blender: bool = False,
     verbose: bool = False,
     debug: bool = False
@@ -245,6 +246,7 @@ def handle_conversion(
                     output_path,
                     use_blender=not no_blender,
                     optimize_mesh=optimize_mesh,
+                    generate_atlas=generate_atlas,
                     platform=target
                 )
                 
@@ -256,6 +258,7 @@ def handle_conversion(
                 output_path,
                 use_blender=not no_blender,
                 optimize_mesh=optimize_mesh,
+                generate_atlas=generate_atlas,
                 platform=target
             )
         
@@ -319,6 +322,7 @@ def convert(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
     target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
     optimize_mesh: bool = typer.Option(False, "--optimize-mesh", help="Enable mesh optimization"),
+    generate_atlas: bool = typer.Option(False, "--generate-atlas", help="Generate texture atlas for optimization"),
     no_blender: bool = typer.Option(False, "--no-blender", help="Skip Blender processing"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug output")
@@ -375,6 +379,7 @@ def convert(
         output_path=output,
         target=target,
         optimize_mesh=optimize_mesh,
+        generate_atlas=generate_atlas,
         no_blender=no_blender,
         verbose=verbose,
         debug=debug
@@ -428,6 +433,98 @@ def batch(
             success_count += 1
     
     console.print(f"\n[bold green]Batch conversion completed: {success_count}/{len(glb_files)} files converted successfully")
+
+@app.command()
+def benchmark(
+    input_dir: Path = typer.Option(..., "--input-dir", "-i", help="Input directory with test assets"),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Output directory for benchmark results"),
+    target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
+    optimize_mesh: bool = typer.Option(True, "--optimize-mesh", help="Enable mesh optimization"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
+):
+    """Run optimization benchmarks on test assets."""
+    console.print("[bold blue]VoxBridge Benchmark - Optimization Testing")
+    
+    if not input_dir.exists():
+        console.print(f"[bold red]Error: Input directory '{input_dir}' does not exist")
+        raise typer.Exit(1)
+    
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Find all GLB files
+    glb_files = list(input_dir.glob("*.glb"))
+    if not glb_files:
+        console.print(f"[yellow]No GLB files found in '{input_dir}'")
+        return
+    
+    console.print(f"Found {len(glb_files)} test assets for benchmarking")
+    
+    # Initialize converter with benchmark support
+    from .converter import VoxBridgeConverter
+    converter = VoxBridgeConverter(debug=verbose)
+    
+    # Enable optimizations for benchmarking
+    converter.optimization_settings['mesh_optimization'] = optimize_mesh
+    converter.optimization_settings['texture_atlas'] = True
+    
+    benchmark_results = {}
+    success_count = 0
+    
+    for glb_file in glb_files:
+        console.print(f"\n[bold cyan]Benchmarking {glb_file.name}...")
+        
+        # Convert with optimizations
+        output_file = output_dir / f"{glb_file.stem}_optimized"
+        success = converter.convert_file(
+            input_path=glb_file,
+            output_path=output_file,
+            platform=target,
+            optimize_mesh=optimize_mesh,
+            use_blender=True
+        )
+        
+        if success:
+            success_count += 1
+            # Get benchmark results
+            asset_results = converter.get_benchmark_results()
+            if glb_file.stem in asset_results:
+                benchmark_results[glb_file.stem] = asset_results[glb_file.stem]
+                console.print(f"  ✓ Benchmark data collected")
+        
+        # Clean up intermediate files
+        for temp_file in output_dir.glob(f"{glb_file.stem}_optimized*"):
+            if temp_file.suffix != '.zip':
+                temp_file.unlink()
+    
+    # Generate benchmark report
+    if benchmark_results:
+        report_path = output_dir / "benchmark_report.json"
+        if converter.generate_benchmark_report(report_path):
+            console.print(f"\n[bold green]Benchmark report generated: {report_path}")
+            
+            # Display summary
+            console.print("\n[bold yellow]Benchmark Summary:")
+            for asset_name, result in benchmark_results.items():
+                original = result.get('original_stats', {})
+                optimized = result.get('optimized_stats', {})
+                
+                if original and optimized:
+                    file_size_improvement = ((original.get('file_size', 0) - optimized.get('file_size', 0)) / max(original.get('file_size', 1), 1)) * 100
+                    triangle_improvement = ((original.get('total_triangles', 0) - optimized.get('total_triangles', 0)) / max(original.get('total_triangles', 1), 1)) * 100
+                    
+                    console.print(f"  {asset_name}:")
+                    console.print(f"    File size: {file_size_improvement:.1f}% improvement")
+                    console.print(f"    Triangles: {triangle_improvement:.1f}% improvement")
+    
+    # Also try to generate report from converter's benchmark data
+    if converter.benchmark and hasattr(converter.benchmark, 'benchmark_results'):
+        if converter.benchmark.benchmark_results:
+            report_path = output_dir / "converter_benchmark_report.json"
+            if converter.benchmark.generate_benchmark_report(report_path):
+                console.print(f"\n[bold green]Converter benchmark report generated: {report_path}")
+    
+    console.print(f"\n[bold green]Benchmark completed: {success_count}/{len(glb_files)} assets tested")
 
 @app.command()
 def doctor():

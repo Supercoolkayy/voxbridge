@@ -69,7 +69,7 @@ pipx list
 pipx ensurepath
 ```
 
-## ✨ Features
+##  Features
 
 ### **Core Conversion**
 
@@ -91,7 +91,7 @@ pipx ensurepath
 - **Graphical Interface**: User-friendly GUI for easy file selection and conversion
 - **Cross-Platform**: Works on Windows, macOS, and Linux/WSL
 
-## 🛠️ Installation
+##  Installation
 
 ### **Global Installation (Recommended)**
 
@@ -125,7 +125,7 @@ cd voxbridge
 bash scripts/install.sh
 ```
 
-## 📖 Usage
+##  Usage
 
 ### **Command Line Interface**
 
@@ -187,7 +187,7 @@ voxbridge-gui
 - **Log Display**: View detailed conversion logs
 - **System Check**: Verify Blender and other dependencies
 
-## 🔄 Conversion Process
+##  Conversion Process
 
 ### **Fallback Chain**
 
@@ -204,7 +204,7 @@ VoxBridge uses a sophisticated fallback system to ensure conversions always succ
 - **Clean Organization**: No scattered .bin files or temporary files
 - **Batch Support**: Each converted file gets its own ZIP
 
-## 📁 Examples
+##  Examples
 
 ### **Basic Conversions**
 
@@ -241,7 +241,7 @@ python3 gui.py
 # Find results in ZIP files
 ```
 
-## 🧪 Testing
+##  Testing
 
 ### **Test the Installation**
 
@@ -270,7 +270,7 @@ python3 -m pytest tests/
 python3 test_cli.py
 ```
 
-## 📋 Requirements
+##  Requirements
 
 ### **System Requirements**
 
@@ -295,7 +295,7 @@ python3 test_cli.py
 - **GLTF**: Clean glTF files with external .bin files
 - **ZIP**: Packaged archives containing all necessary files
 
-## 📚 Documentation
+##  Documentation
 
 ### **Core Guides**
 
@@ -321,7 +321,7 @@ python3 test_cli.py
 - `scripts/test.sh` - Comprehensive test runner
 - `scripts/build.sh` - Package building script
 
-## 🆘 Support & Troubleshooting
+##  Support & Troubleshooting
 
 ### **Common Issues**
 
@@ -367,11 +367,11 @@ voxbridge convert --input model.glb --target unity --debug
 - **Discussions**: https://github.com/Supercoolkayy/voxbridge/discussions
 - **Documentation**: Check the docs/ folder for detailed guides
 
-## 📄 License
+##  License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## 🤝 Contributing
+##  Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
@@ -394,4 +394,4 @@ python3 gui.py
 
 ---
 
-**VoxBridge v1.0.3** - Professional Asset Conversion Made Simple 🚀
+**VoxBridge v1.0.3** - Professional Asset Conversion Made Simple 
