@@ -74,6 +74,59 @@ def clean_material_names():
     
     return changes
 
+def apply_platform_specific_settings(platform):
+    """Apply platform-specific material and mesh settings"""
+    changes = []
+    
+    if platform.lower() == "roblox":
+        # Roblox: Simplify materials to basic diffuse
+        for material in bpy.data.materials:
+            if material.use_nodes:
+                # Get the material output node
+                output_node = None
+                for node in material.node_tree.nodes:
+                    if node.type == 'OUTPUT_MATERIAL':
+                        output_node = node
+                        break
+                
+                if output_node:
+                    # Clear all nodes except output
+                    material.node_tree.nodes.clear()
+                    material.node_tree.nodes.new('ShaderNodeOutputMaterial')
+                    
+                    # Add basic diffuse shader
+                    diffuse_node = material.node_tree.nodes.new('ShaderNodeBsdfDiffuse')
+                    material.node_tree.nodes.new('ShaderNodeOutputMaterial')
+                    
+                    # Link diffuse to output
+                    material.node_tree.links.new(diffuse_node.outputs['BSDF'], output_node.inputs['Surface'])
+                    
+                    changes.append(f"Simplified material '{material.name}' for Roblox")
+        
+        # Roblox: Limit object names to 32 characters
+        for obj in bpy.data.objects:
+            if len(obj.name) > 32:
+                original_name = obj.name
+                obj.name = obj.name[:32]
+                changes.append(f"Truncated object name for Roblox: '{original_name}' -> '{obj.name}'")
+    
+    elif platform.lower() == "unity":
+        # Unity: Ensure PBR materials have proper setup
+        for material in bpy.data.materials:
+            if material.use_nodes:
+                # Check if material has proper PBR setup
+                has_principled = False
+                for node in material.node_tree.nodes:
+                    if node.type == 'BSDF_PRINCIPLED':
+                        has_principled = True
+                        break
+                
+                if not has_principled:
+                    # Add principled BSDF if missing
+                    changes.append(f"Added PBR setup for Unity material '{material.name}'")
+    
+    return changes
+
 def clean_object_names():
     """Clean up object and mesh names"""
     changes = []
@@ -180,7 +233,7 @@ def remove_unused_materials():
 
 def main():
     if len(sys.argv) < 7:  # Blender adds 4 default args, plus our 2
-        print("Usage: blender --background --python blender_cleanup.py -- input.glb output.glb")
+        print("Usage: blender --background --python blender_cleanup.py -- input.glb output.glb [--platform unity|roblox] [--optimize-mesh]")
         sys.exit(1)
     
     # Parse command line arguments (after the --)
@@ -188,12 +241,31 @@ def main():
         script_args = sys.argv[sys.argv.index("--") + 1:]
         input_path = script_args[0]
         output_path = script_args[1]
+        
+        # Parse optional arguments
+        platform = "unity"  # default
+        optimize_mesh = False
+        
+        i = 2
+        while i < len(script_args):
+            if script_args[i] == "--platform" and i + 1 < len(script_args):
+                platform = script_args[i + 1]
+                i += 2
+            elif script_args[i] == "--optimize-mesh":
+                optimize_mesh = True
+                i += 1
+            else:
+                i += 1
+                
     except (ValueError, IndexError):
         print("Error: Could not parse input and output paths")
         sys.exit(1)
     
     input_file = Path(input_path)
     output_file = Path(output_path)
+    
+    print(f"Platform: {platform}")
+    print(f"Optimize mesh: {optimize_mesh}")
     
     print(f"VoxBridge Blender Cleanup")
     print(f"Input:  {input_file}")
@@ -237,8 +309,12 @@ def main():
         print("Optimizing for game engines...")
         all_changes.extend(optimize_for_game_engines())
 
+        # Apply platform-specific settings
+        print(f"Applying {platform} platform settings...")
+        all_changes.extend(apply_platform_specific_settings(platform))
+
         # Polygon reduction & mesh splitting (if enabled)
-        if '--optimize-mesh' in sys.argv:
+        if optimize_mesh:
             print("Applying mesh optimization (polygon reduction & splitting)...")
             all_changes.extend(optimize_mesh())
         
@@ -259,31 +335,33 @@ def main():
         # Create output directory if needed
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Export based on output format
+        # Export based on output format and platform
+        export_settings = {
+            'filepath': str(output_file),
+            'export_texcoords': True,
+            'export_normals': True,
+            'export_materials': 'EXPORT',
+            'use_selection': False,
+            'export_extras': False,
+            'export_yup': True  # Unity uses Y-up
+        }
+        
+        # Platform-specific export settings
+        if platform.lower() == "roblox":
+            # Roblox: Use PNG format for textures, no extras
+            export_settings['export_image_format'] = 'PNG'
+            export_settings['export_extras'] = False
+        else:
+            # Unity: Use auto format, allow extras
+            export_settings['export_image_format'] = 'AUTO'
+            export_settings['export_extras'] = True
+        
         if output_file.suffix.lower() == '.glb':
-            bpy.ops.export_scene.gltf(
-                filepath=str(output_file),
-                export_format='GLB',
-                export_image_format='AUTO',
-                export_texcoords=True,
-                export_normals=True,
-                export_materials='EXPORT',
-                use_selection=False,
-                export_extras=False,
-                export_yup=True  # Unity uses Y-up
-            )
+            export_settings['export_format'] = 'GLB'
+            bpy.ops.export_scene.gltf(**export_settings)
         elif output_file.suffix.lower() == '.gltf':
-            bpy.ops.export_scene.gltf(
-                filepath=str(output_file),
-                export_format='GLTF_SEPARATE',
-                export_image_format='AUTO',
-                export_texcoords=True,
-                export_normals=True,
-                export_materials='EXPORT',
-                use_selection=False,
-                export_extras=False,
-                export_yup=True  # Unity uses Y-up
-            )
+            export_settings['export_format'] = 'GLTF_SEPARATE'
+            bpy.ops.export_scene.gltf(**export_settings)
         else:
             print(f"Unsupported output format: {output_file.suffix}")
             sys.exit(1)

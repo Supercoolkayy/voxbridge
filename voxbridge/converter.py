@@ -20,6 +20,13 @@ try:
 except ImportError:
     TEXTURE_OPTIMIZATION_AVAILABLE = False
 
+# Import platform profiles
+try:
+    from .platform_profiles import PlatformProfileManager, run_gltf_pipeline, run_gltf_validator
+    PLATFORM_PROFILES_AVAILABLE = True
+except ImportError:
+    PLATFORM_PROFILES_AVAILABLE = False
+
 
 class VoxBridgeConverter:
     """Core converter class for VoxEdit glTF/glb files with platform-specific optimizations"""
@@ -30,6 +37,17 @@ class VoxBridgeConverter:
         self._extracted_binary_data = {}
         self.last_changes = []
         self.debug = debug
+        
+        # Initialize platform profile manager
+        if PLATFORM_PROFILES_AVAILABLE:
+            self.platform_manager = PlatformProfileManager(debug)
+        else:
+            self.platform_manager = None
+            if debug:
+                print("Platform profiles not available")
+        
+        # Initialize conversion stats
+        self._last_conversion_stats = {}
         
     def validate_input(self, input_path: Path) -> bool:
         """Validate input file exists and has correct format"""
@@ -371,9 +389,71 @@ class VoxBridgeConverter:
                 
                 if self.debug:
                     print(f"Trimesh: Successfully exported to {gltf_output}")
+            
+                # Apply platform-specific optimizations if available
+                if self.platform_manager:
+                    if self.debug:
+                        print(f"Applying {platform} platform profile to Trimesh output...")
+                    
+                    # Read the generated GLTF file
+                    with open(gltf_output, 'r', encoding='utf-8') as f:
+                        gltf_data = json.load(f)
+                    
+                    # Apply platform profile optimizations
+                    gltf_data = self.platform_manager.apply_profile(gltf_data, output_path, platform)
+                    
+                    # Create platform-specific output files
+                    platform_outputs = self.platform_manager.create_platform_specific_outputs(
+                        gltf_data, output_path, platform
+                    )
+                    
+                    if self.debug:
+                        print(f"Created {len(platform_outputs)} platform-specific outputs")
+                    
+                    # Use the first platform output for further processing
+                    if platform_outputs:
+                        gltf_output = platform_outputs[0]
+                
+                # Capture conversion statistics for summary
+                if gltf_output.exists():
+                    try:
+                        # Read the final GLTF file to get accurate statistics
+                        with open(gltf_output, 'r', encoding='utf-8') as f:
+                            final_gltf_data = json.load(f)
+                        
+                        # Store statistics for summary display
+                        self._last_conversion_stats = {
+                            'meshes': len(final_gltf_data.get('meshes', [])),
+                            'materials': len(final_gltf_data.get('materials', [])),
+                            'textures': len(final_gltf_data.get('textures', [])),
+                            'nodes': len(final_gltf_data.get('nodes', [])),
+                            'file_size': gltf_output.stat().st_size
+                        }
+                        
+                        if self.debug:
+                            print(f"Captured conversion stats: {self._last_conversion_stats}")
+                            
+                    except Exception as e:
+                        if self.debug:
+                            print(f"Warning: Could not capture conversion stats: {e}")
+                        # Fallback to basic stats
+                        self._last_conversion_stats = {
+                            'meshes': 0,
+                            'materials': 0,
+                            'textures': 0,
+                            'nodes': 0,
+                            'file_size': 0
+                        }
+                
+                # Package output files into ZIP
+                if gltf_output.exists():
+                    zip_path = self._package_output_files(output_path, gltf_output)
+                    if zip_path.suffix == '.zip':
+                        print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                    else:
+                        print(f"Conversion complete. Output saved as {gltf_output.name}")
                 
                 return True
-                
             except Exception as export_error:
                 if self.debug:
                     print(f"Trimesh export failed: {export_error}")
@@ -1160,17 +1240,88 @@ class VoxBridgeConverter:
                                         if self.debug:
                                             print(f"Updated accessor {i} count to {accessor['count']}")
             
-            # Skip GLB conversion entirely - go straight to GLTF output
-            # This prevents unnecessary .glb files and ensures clean output
-            gltf_output = output_path.with_suffix('.gltf')
-            with open(gltf_output, 'w', encoding='utf-8') as f:
-                json.dump(gltf_data, f, indent=2)
+            # Apply platform-specific optimizations if available
+            if self.platform_manager:
+                if self.debug:
+                    print(f"Applying {platform} platform profile...")
+                
+                # Apply platform profile optimizations
+                gltf_data = self.platform_manager.apply_profile(gltf_data, output_path, platform)
+                
+                # Create platform-specific output files
+                platform_outputs = self.platform_manager.create_platform_specific_outputs(
+                    gltf_data, output_path, platform
+                )
+                
+                if self.debug:
+                    print(f"Created {len(platform_outputs)} platform-specific outputs")
+                
+                # Use the first platform output for further processing
+                if platform_outputs:
+                    gltf_output = platform_outputs[0]
+                else:
+                    gltf_output = output_path.with_suffix('.gltf')
+            else:
+                # Fallback to basic GLTF output
+                gltf_output = output_path.with_suffix('.gltf')
+                with open(gltf_output, 'w', encoding='utf-8') as f:
+                    json.dump(gltf_data, f, indent=2)
             
             if self.debug:
                 print(f"Saved as GLTF: {gltf_output}")
             
+            # Run platform-specific validation
+            if self.platform_manager:
+                is_valid, validation_messages = self.platform_manager.validate_output(gltf_output, platform)
+                if self.debug:
+                    if is_valid:
+                        print(f"{platform.capitalize()} validation passed")
+                    else:
+                        print(f"{platform.capitalize()} validation issues:")
+                        for msg in validation_messages:
+                            print(f"  - {msg}")
+            
             # Run automatic validation
             self._run_validation(gltf_output)
+            
+            # Capture conversion statistics for summary
+            if gltf_output.exists():
+                try:
+                    # Read the final GLTF file to get accurate statistics
+                    with open(gltf_output, 'r', encoding='utf-8') as f:
+                        final_gltf_data = json.load(f)
+                    
+                    # Store statistics for summary display
+                    self._last_conversion_stats = {
+                        'meshes': len(final_gltf_data.get('meshes', [])),
+                        'materials': len(final_gltf_data.get('materials', [])),
+                        'textures': len(final_gltf_data.get('textures', [])),
+                        'nodes': len(final_gltf_data.get('nodes', [])),
+                        'file_size': gltf_output.stat().st_size
+                    }
+                    
+                    if self.debug:
+                        print(f"Captured conversion stats: {self._last_conversion_stats}")
+                        
+                except Exception as e:
+                    if self.debug:
+                        print(f"Warning: Could not capture conversion stats: {e}")
+                    # Fallback to basic stats
+                    self._last_conversion_stats = {
+                        'meshes': len(gltf_data.get('meshes', [])),
+                        'materials': len(gltf_data.get('materials', [])),
+                        'textures': len(gltf_data.get('textures', [])),
+                        'nodes': len(gltf_data.get('nodes', [])),
+                        'file_size': 0
+                    }
+            
+            # Package output files into ZIP
+            if gltf_output.exists():
+                zip_path = self._package_output_files(output_path, gltf_output)
+                if zip_path.suffix == '.zip':
+                    print(f"Conversion complete. Your files are packaged into {zip_path.name}")
+                else:
+                    print(f"Conversion complete. Output saved as {gltf_output.name}")
             
             return True
                 
@@ -1636,7 +1787,7 @@ class VoxBridgeConverter:
                 if self.debug:
                     print("Processing GLB file - extracting binary data...")
                 # Use the main conversion method which properly handles GLB files
-                success = self.convert_gltf_json(input_path, output_path)
+                success = self.convert_gltf_json(input_path, output_path, platform="unity")  # Default to Unity for Sketchfab
                 if not success:
                     if self.debug:
                         print("Failed to convert GLB file")
@@ -2072,7 +2223,7 @@ class VoxBridgeConverter:
             
             # Check if Node.js is available
             try:
-                result = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(['node', 'version'], capture_output=True, text=True, timeout=10)
                 if result.returncode != 0:
                     if self.debug:
                         print("Node.js not available, skipping validation")
@@ -2114,6 +2265,55 @@ class VoxBridgeConverter:
             if self.debug:
                 print(f"Validation failed with error: {e}")
             return True  # Don't fail conversion due to validation issues
+    
+    def get_last_conversion_stats(self) -> Dict:
+        """Get the statistics from the last conversion"""
+        return self._last_conversion_stats
+    
+    def _package_output_files(self, output_path: Path, gltf_path: Path) -> Path:
+        """Package output files into ZIP archive"""
+        try:
+            import zipfile
+            
+            # Create ZIP with the output filename
+            zip_path = output_path.parent / f"{output_path.stem}.zip"
+            
+            # Find all associated files to include in the ZIP
+            files_to_zip = []
+            
+            # Add GLTF file
+            files_to_zip.append((gltf_path, gltf_path.name))
+            
+            # Look for .bin files and include them
+            for bin_file in gltf_path.parent.glob("*.bin"):
+                files_to_zip.append((bin_file, bin_file.name))
+            
+            # Look for texture files and include them
+            texture_exts = ['.png', '.jpg', '.jpeg', '.tga', '.bmp']
+            for texture_file in gltf_path.parent.glob("*"):
+                if texture_file.suffix.lower() in texture_exts:
+                    files_to_zip.append((texture_file, texture_file.name))
+            
+            # Create ZIP package
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path, zip_name in files_to_zip:
+                    zipf.write(file_path, zip_name)
+            
+            # Clean up scattered files (keep only ZIP)
+            for file_path, _ in files_to_zip:
+                if file_path != zip_path:
+                    file_path.unlink()
+            
+            if self.debug:
+                print(f"Created ZIP package: {zip_path}")
+                print(f"Files included: {[name for _, name in files_to_zip]}")
+            
+            return zip_path
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Warning: Could not create ZIP package: {e}")
+            return gltf_path  # Return original file if ZIP creation fails
 
 
 class VoxBridgeError(Exception):
