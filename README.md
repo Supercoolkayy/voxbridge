@@ -189,6 +189,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.  
 
 ---
