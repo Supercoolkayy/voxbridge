@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voxbridge"
-version = "1.0.3"
+version = "1.0.6"
 description = "VoxBridge: convert VoxEdit glTF/GLB assets to engine-ready files for Unity and Roblox"
 readme = "README.md"
 license = {text = "MIT"}

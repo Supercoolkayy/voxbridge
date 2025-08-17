@@ -26,7 +26,7 @@ CLI Usage:
     voxbridge input.gltf output.gltf --optimize-mesh --generate-atlas --platform unity
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.6"
 __author__ = "Abdulkareem Oyeneye/Dapps over Apps."
 __email__ = "team@dappsoverapps.com"
 __license__ = "MIT"

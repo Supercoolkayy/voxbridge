@@ -18,7 +18,7 @@ try:
     VOXBRIDGE_AVAILABLE = True
 except ImportError:
     VOXBRIDGE_AVAILABLE = False
-    __version__ = "1.0.0"
+    __version__ = "1.0.6"
 
 
 class VoxBridgeGUI:
