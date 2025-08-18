@@ -45,9 +45,9 @@ console = Console(emoji=False, width=80)
 def print_header(verbose: bool = False):
     """Print the VoxBridge header with box-drawing characters."""
     if verbose:
-        title = "VoxBridge Converter v1.0.6 (Verbose Mode)"
+        title = "VoxBridge Converter v1.0.7 (Verbose Mode)"
     else:
-        title = "VoxBridge Converter v1.0.6"
+        title = "VoxBridge Converter v1.0.7"
     
     subtitle = "GLB ➜ GLTF / Roblox / Unity Exporter"
     

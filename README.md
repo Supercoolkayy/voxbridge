@@ -394,4 +394,4 @@ python3 gui.py
 
 ---
 
-**VoxBridge v1.0.6** - Professional Asset Conversion Made Simple
+**VoxBridge v1.0.7** - Professional Asset Conversion Made Simple

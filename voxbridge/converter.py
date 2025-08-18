@@ -1688,7 +1688,7 @@ class VoxBridgeConverter:
                 "original_source_format": "GLB",
                 "target_platform": platform,
                 "export_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "tool_version": "1.0.6",
+                "tool_version": "1.0.7",
                 "platform_specific_notes": self._get_platform_notes(platform),
                 "files_included": [name for _, name in files_to_zip]
             }
