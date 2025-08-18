@@ -45,9 +45,9 @@ console = Console(emoji=False, width=80)
 def print_header(verbose: bool = False):
     """Print the VoxBridge header with box-drawing characters."""
     if verbose:
-        title = "VoxBridge Converter v1.0.3 (Verbose Mode)"
+        title = "VoxBridge Converter v1.0.6 (Verbose Mode)"
     else:
-        title = "VoxBridge Converter v1.0.3"
+        title = "VoxBridge Converter v1.0.6"
     
     subtitle = "GLB ➜ GLTF / Roblox / Unity Exporter"
     
@@ -71,90 +71,6 @@ Target: {target}"""
     
     console.print(config, style="dim")
 
-<<<<<<< HEAD
-def print_header():
-    """Print VoxBridge header"""
-    if RICH_AVAILABLE:
-        try:
-            title = Text("VoxBridge v1.0.6", style="bold cyan")
-            subtitle = Text("VoxEdit to Unity/Roblox Converter", style="dim white")
-            version = Text("Professional Asset Converter", style="italic green")
-            if console:
-                console.print(Panel.fit(f"{title}\n{subtitle}\n{version}", 
-                                       border_style="cyan", padding=(0, 1)))
-        except Exception:
-            print("VoxBridge v1.0.6 - VoxEdit to Unity/Roblox Converter")
-            print("Professional Asset Converter")
-            print("=" * 55)
-    else:
-        print("VoxBridge v1.0.6 - VoxEdit to Unity/Roblox Converter")
-        print("Professional Asset Converter")
-        print("=" * 55)
-
-
-def print_conversion_start(input_path: Path, output_path: Path):
-    """Print conversion start information"""
-    if RICH_AVAILABLE:
-        try:
-            if console:
-                console.print("[bold yellow]File Configuration[/bold yellow]")
-                
-                table = Table(show_header=False, box=None, show_edge=False)
-                table.add_column("Type", style="bold cyan", no_wrap=True, width=10)
-                table.add_column("Path", style="white")
-                
-                table.add_row("Input", str(input_path))
-                table.add_row("Output", str(output_path))
-                console.print(table)
-                console.print()
-        except Exception:
-            print("[INPUT]  File Configuration")
-            print(f"[INPUT]  {input_path}")
-            print(f"[OUTPUT] {output_path}")
-            print()
-    else:
-        print("[INPUT]  File Configuration")
-        print(f"[INPUT]  {input_path}")
-        print(f"[OUTPUT] {output_path}")
-        print()
-
-
-def print_validation_results(stats: dict):
-    """Print validation results"""
-    if RICH_AVAILABLE:
-        try:
-            safe_print("[bold magenta]Validation Results[/bold magenta]")
-            
-            if stats.get('file_exists'):
-                safe_print("[bold green]✅ File created successfully![/bold green]")
-                safe_print(f"[dim]File size:[/dim] {stats.get('file_size', 0):,} bytes")
-                
-                if stats.get('materials') is not None:
-                    safe_print(f"[dim]Materials:[/dim] {stats.get('materials', 0)}")
-                if stats.get('textures') is not None:
-                    safe_print(f"[dim]Textures:[/dim] {stats.get('textures', 0)}")
-                if stats.get('meshes') is not None:
-                    safe_print(f"[dim]Meshes:[/dim] {stats.get('meshes', 0)}")
-                if stats.get('nodes') is not None:
-                    safe_print(f"[dim]Nodes:[/dim] {stats.get('nodes', 0)}")
-                
-                if stats.get('note'):
-                    safe_print(f"[dim]Note:[/dim] {stats.get('note')}")
-            else:
-                safe_print("[bold red]❌ File creation failed![/bold red]")
-        except Exception:
-            # Fallback to regular print
-            if stats.get('file_exists'):
-                print("✅ File created successfully!")
-                print(f"File size: {stats.get('file_size', 0):,} bytes")
-            else:
-                print("❌ File creation failed!")
-    else:
-        # Regular print fallback
-        if stats.get('file_exists'):
-            print("✅ File created successfully!")
-            print(f"File size: {stats.get('file_size', 0):,} bytes")
-=======
 def print_step_header(step_num: int, total_steps: int, title: str):
     """Print a step header with consistent formatting."""
     step_text = f"[{step_num}/{total_steps}] {title}"
@@ -191,7 +107,6 @@ def print_validation_summary(validation_results: dict, verbose: bool = False):
             print_step_info(f"Buffers: OK", 1)
             print_step_info(f"Accessors: {error_count} errors, {warning_count} warnings", 1)
             print_step_info("(run with --verbose for details)", 2)
->>>>>>> recovered-work
         else:
             print_step_info("All validations passed", 1)
 

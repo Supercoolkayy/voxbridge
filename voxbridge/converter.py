@@ -678,68 +678,33 @@ class VoxBridgeConverter:
         return gltf_data, changes_made
     
     def _process_glb_file(self, glb_path: Path, output_path: Path) -> Tuple[Dict, List[str]]:
-        """Process GLB file and convert to GLTF format"""
+        """Process GLB file to extract glTF JSON and binary data"""
         try:
-<<<<<<< HEAD
-            print(f"🔍 [DEBUG] Starting GLB processing for: {glb_path}")
-            print(f"🔍 [DEBUG] Output path: {output_path}")
-=======
             if self.debug:
                 print(f"Processing GLB file: {glb_path}")
->>>>>>> recovered-work
             
-            # Try pygltflib first
+            # Try using pygltflib first (more reliable)
             try:
                 import pygltflib
-                print(f"🔍 [DEBUG] pygltflib imported successfully")
+                from pygltflib import GLTF2
                 
-<<<<<<< HEAD
-                # Load GLB file
-                print(f"🔍 [DEBUG] Loading GLB file with pygltflib...")
-                gltf = pygltflib.GLTF2().load(str(glb_path))
-                print(f"🔍 [DEBUG] GLB file loaded successfully")
-=======
                 if self.debug:
                     print("Using pygltflib for GLB processing...")
                 gltf = GLTF2.load(str(glb_path))
->>>>>>> recovered-work
                 
-                # Convert to dictionary for processing
-                print(f"🔍 [DEBUG] Converting pygltflib objects to dictionary...")
+                # Convert to dictionary format
                 gltf_data = {}
                 
-                # Process each component with detailed logging
-                components_to_process = [
-                    'asset', 'scene', 'scenes', 'nodes', 'meshes', 'materials', 
-                    'textures', 'samplers', 'images', 'accessors', 'bufferViews', 
-                    'buffers', 'animations', 'skins'
-                ]
+                # Copy all the data and convert pygltflib objects to dictionaries
+                if hasattr(gltf, 'asset') and gltf.asset:
+                    gltf_data['asset'] = {
+                        'version': gltf.asset.version,
+                        'generator': gltf.asset.generator
+                    }
                 
-                for component in components_to_process:
-                    if hasattr(gltf, component):
-                        print(f"🔍 [DEBUG] Processing component: {component}")
-                        component_data = getattr(gltf, component)
-                        
-                        if component_data is not None:
-                            if isinstance(component_data, list):
-                                print(f"🔍 [DEBUG] {component} is a list with {len(component_data)} items")
-                                gltf_data[component] = []
-                                for i, item in enumerate(component_data):
-                                    print(f"🔍 [DEBUG] Converting {component}[{i}] from {type(item).__name__}")
-                                    converted_item = self._convert_pygltflib_object(item)
-                                    gltf_data[component].append(converted_item)
-                            else:
-                                print(f"🔍 [DEBUG] {component} is a single object of type {type(component_data).__name__}")
-                                converted_item = self._convert_pygltflib_object(component_data)
-                                gltf_data[component] = converted_item
-                        else:
-                            print(f"🔍 [DEBUG] {component} is None, skipping")
-                    else:
-                        print(f"🔍 [DEBUG] {component} not found in GLB")
+                if hasattr(gltf, 'scene') and gltf.scene is not None:
+                    gltf_data['scene'] = gltf.scene
                 
-<<<<<<< HEAD
-                print(f"🔍 [DEBUG] GLTF data conversion complete. Keys: {list(gltf_data.keys())}")
-=======
                 if hasattr(gltf, 'scenes') and gltf.scenes:
                     # Convert pygltflib Scene objects to dictionaries
                     gltf_data['scenes'] = []
@@ -974,22 +939,15 @@ class VoxBridgeConverter:
                 if self.debug:
                     print(f"Successfully extracted GLB data using pygltflib")
                     print(f"Components found: {list(gltf_data.keys())}")
->>>>>>> recovered-work
                 
                 # Extract binary data for potential re-embedding
                 if hasattr(gltf, '_glb_data') and gltf._glb_data:
-                    print(f"🔍 [DEBUG] GLB contains binary data, extracting...")
                     self._extracted_binary_data = self._extract_binary_data(gltf, gltf_data)
-<<<<<<< HEAD
-                    print(f"🔍 [DEBUG] Extracted {len(self._extracted_binary_data)} binary buffers")
-=======
                     if self.debug:
                         print(f"Extracted {len(self._extracted_binary_data)} binary buffers")
->>>>>>> recovered-work
                     
                     # Update buffer references to point to external binary file
                     if 'buffers' in gltf_data and gltf_data['buffers']:
-                        print(f"🔍 [DEBUG] Processing buffer references...")
                         # Create a single external binary file with unique name
                         binary_filename = f"{output_path.stem}.bin"
                         binary_path = output_path.parent / binary_filename
@@ -998,44 +956,20 @@ class VoxBridgeConverter:
                         total_size = 0
                         buffer_view_offsets = {}
                         
-                        print(f"🔍 [DEBUG] Calculating buffer view offsets...")
                         # First pass: calculate total size and new offsets
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
                             if f'bufferView_{i}' in self._extracted_binary_data:
                                 buffer_view_offsets[i] = total_size
                                 total_size += len(self._extracted_binary_data[f'bufferView_{i}'])
-                                print(f"🔍 [DEBUG] BufferView {i}: size {len(self._extracted_binary_data[f'bufferView_{i}']):,}, offset {total_size:,}")
-                        
-                        print(f"🔍 [DEBUG] Total binary size: {total_size:,} bytes")
                         
                         # Write the combined binary data
-                        print(f"🔍 [DEBUG] Writing combined binary file...")
                         with open(binary_path, 'wb') as f:
                             for i, buffer_view in enumerate(gltf_data['bufferViews']):
                                 if f'bufferView_{i}' in self._extracted_binary_data:
                                     f.write(self._extracted_binary_data[f'bufferView_{i}'])
                         
                         # Update buffer views with new offsets and byteLength
-                        print(f"🔍 [DEBUG] Updating buffer view offsets and lengths...")
-                        current_offset = 0
-                        valid_buffer_views = []
-                        
                         for i, buffer_view in enumerate(gltf_data['bufferViews']):
-<<<<<<< HEAD
-                            if f'bufferView_{i}' in self._extracted_binary_data:
-                                # Update this buffer view with correct offset and length
-                                buffer_view['byteOffset'] = current_offset
-                                buffer_view['byteLength'] = len(self._extracted_binary_data[f'bufferView_{i}'])
-                                print(f"🔍 [DEBUG] BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes, offset: {buffer_view['byteOffset']:,}")
-                                current_offset += buffer_view['byteLength']
-                                valid_buffer_views.append(buffer_view)
-                            else:
-                                print(f"⚠️  BufferView {i}: No extracted data, skipping to prevent gaps")
-                        
-                        # Replace buffer views with only valid ones to prevent gaps
-                        gltf_data['bufferViews'] = valid_buffer_views
-                        print(f"🔍 [DEBUG] Final buffer views count: {len(gltf_data['bufferViews'])}")
-=======
                             if i in buffer_view_offsets:
                                 buffer_view['byteOffset'] = buffer_view_offsets[i]
                                 # CRITICAL: Update byteLength to match the actual extracted data
@@ -1045,7 +979,6 @@ class VoxBridgeConverter:
                                         print(f"BufferView {i}: Updated byteLength to {buffer_view['byteLength']:,} bytes")
                         
 
->>>>>>> recovered-work
                         
                         # Update the first buffer to reference the external file
                         gltf_data['buffers'][0] = {
@@ -1092,11 +1025,6 @@ class VoxBridgeConverter:
                     if self.debug:
                         print("No accessors found in gltf_data")
                 
-                # CRITICAL: Fix accessor byteLength calculations to prevent Error 23
-                print(f"🔍 [DEBUG] Starting accessor byteLength fixes...")
-                self._fix_accessor_byte_lengths(gltf_data)
-                
-                print(f"🔍 [DEBUG] GLB processing complete")
                 return gltf_data, ["GLB file processed successfully using pygltflib"]
                 
             except ImportError:
@@ -1760,7 +1688,7 @@ class VoxBridgeConverter:
                 "original_source_format": "GLB",
                 "target_platform": platform,
                 "export_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "tool_version": "1.0.3",
+                "tool_version": "1.0.6",
                 "platform_specific_notes": self._get_platform_notes(platform),
                 "files_included": [name for _, name in files_to_zip]
             }
@@ -2121,48 +2049,19 @@ class VoxBridgeConverter:
     
     def _extract_binary_data(self, gltf, gltf_data: Dict) -> Dict[str, bytes]:
         """Extract binary buffer data from GLTF2 object"""
-        print(f"🔍 [DEBUG] Starting binary data extraction...")
         binary_data = {}
         
         if hasattr(gltf, '_glb_data') and gltf._glb_data and hasattr(gltf, 'bufferViews') and gltf.bufferViews:
-            print(f"🔍 [DEBUG] GLB contains binary data: {len(gltf._glb_data):,} bytes")
-            print(f"🔍 [DEBUG] Found {len(gltf.bufferViews)} buffer views")
-            
             # Extract data from each buffer view
             for i, buffer_view in enumerate(gltf.bufferViews):
-                print(f"🔍 [DEBUG] Processing buffer view {i}: {buffer_view}")
-                
                 if hasattr(buffer_view, 'byteOffset') and hasattr(buffer_view, 'byteLength'):
                     start = buffer_view.byteOffset
                     end = start + buffer_view.byteLength
-                    print(f"🔍 [DEBUG] Buffer view {i}: offset {start}, length {buffer_view.byteLength}, end {end}")
-                    
                     if start < len(gltf._glb_data) and end <= len(gltf._glb_data):
-<<<<<<< HEAD
-                        extracted_data = gltf._glb_data[start:end]
-                        binary_data[f'bufferView_{i}'] = extracted_data
-                        print(f"📦 Extracted buffer view {i}: {len(extracted_data)} bytes")
-                    else:
-                        print(f"❌ [DEBUG] Buffer view {i}: Invalid range - start {start}, end {end}, data size {len(gltf._glb_data)}")
-                else:
-                    print(f"⚠️ [DEBUG] Buffer view {i}: Missing byteOffset or byteLength attributes")
-        else:
-            print(f"🔍 [DEBUG] No binary data found in GLB")
-            if not hasattr(gltf, '_glb_data'):
-                print(f"🔍 [DEBUG] GLB missing _glb_data attribute")
-            if not gltf._glb_data:
-                print(f"🔍 [DEBUG] GLB _glb_data is empty")
-            if not hasattr(gltf, 'bufferViews'):
-                print(f"🔍 [DEBUG] GLB missing bufferViews attribute")
-            if not gltf.bufferViews:
-                print(f"🔍 [DEBUG] GLB bufferViews is empty")
-=======
                         binary_data[f'bufferView_{i}'] = gltf._glb_data[start:end]
                         if self.debug:
                             print(f"Extracted buffer view {i}: {len(gltf._glb_data[start:end])} bytes")
->>>>>>> recovered-work
         
-        print(f"🔍 [DEBUG] Binary data extraction complete. Extracted {len(binary_data)} buffer views")
         return binary_data
 
     def _embed_binary_data(self, gltf_data: Dict, binary_data: Dict[str, bytes]) -> Dict:
@@ -2698,80 +2597,6 @@ class VoxBridgeConverter:
             if self.debug:
                 print(f"Warning: Could not create ZIP package: {e}")
             return gltf_path  # Return original file if ZIP creation fails
-
-    def _fix_accessor_byte_lengths(self, gltf_data: Dict):
-        """Fix accessor byteLength calculations to prevent Error 23 validation issues"""
-        if 'accessors' not in gltf_data or 'bufferViews' not in gltf_data:
-            print(f"🔍 [DEBUG] Missing accessors or bufferViews in GLTF data")
-            return
-        
-        print(f"🔍 [DEBUG] Starting accessor byteLength fixes...")
-        print(f"🔍 [DEBUG] Total accessors: {len(gltf_data['accessors'])}")
-        print(f"🔍 [DEBUG] Total bufferViews: {len(gltf_data['bufferViews'])}")
-        
-        # CRITICAL FIX: Don't redistribute accessors - just ensure they fit in their assigned buffer views
-        # The original buffer view assignments are correct and should be preserved
-        
-        for i, accessor in enumerate(gltf_data['accessors']):
-            print(f"🔍 [DEBUG] Processing accessor {i}: {accessor}")
-            
-            if 'bufferView' in accessor and accessor['bufferView'] is not None:
-                buffer_view_index = accessor['bufferView']
-                print(f"🔍 [DEBUG] Accessor {i} references bufferView {buffer_view_index}")
-                
-                if buffer_view_index < len(gltf_data['bufferViews']):
-                    buffer_view = gltf_data['bufferViews'][buffer_view_index]
-                    print(f"🔍 [DEBUG] BufferView {buffer_view_index}: {buffer_view}")
-                    
-                    # Calculate required bytes for this accessor
-                    component_count = self._get_type_component_count(accessor.get('type', 'SCALAR'))
-                    component_size = self._get_component_size(accessor.get('componentType', 5126))
-                    bytes_per_element = component_count * component_size
-                    total_bytes_needed = accessor.get('count', 0) * bytes_per_element
-                    
-                    print(f"🔍 [DEBUG] Accessor {i}: Type={accessor.get('type', 'SCALAR')}, ComponentType={accessor.get('componentType', 5126)}, Count={accessor.get('count', 0)}")
-                    print(f"🔍 [DEBUG] Accessor {i}: ComponentCount={component_count}, ComponentSize={component_size}, BytesPerElement={bytes_per_element}")
-                    print(f"🔍 [DEBUG] Accessor {i}: TotalBytesNeeded={total_bytes_needed}, BufferViewSize={buffer_view.get('byteLength', 0)}")
-                    
-                    if total_bytes_needed > buffer_view.get('byteLength', 0):
-                        print(f"⚠️ [DEBUG] Accessor {i}: Count {accessor.get('count', 0)} exceeds BufferView {buffer_view_index} byteLength {buffer_view.get('byteLength', 0)}")
-                        # Adjust count to fit in buffer view
-                        max_elements = buffer_view.get('byteLength', 0) // bytes_per_element
-                        print(f"🔍 [DEBUG] Accessor {i}: Adjusting count from {accessor.get('count', 0)} to {max_elements}")
-                        accessor['count'] = max_elements
-                    else:
-                        print(f"ℹ️ [DEBUG] Accessor {i}: Count {accessor.get('count', 0)} fits in BufferView {buffer_view_index} (total bytes: {total_bytes_needed})")
-                else:
-                    print(f"❌ [DEBUG] Accessor {i}: Invalid bufferView index {buffer_view_index} (max: {len(gltf_data['bufferViews'])-1})")
-            else:
-                print(f"⚠️ [DEBUG] Accessor {i}: No bufferView reference found")
-        
-        print(f"✅ [DEBUG] Accessor count adjustments complete")
-    
-    def _get_type_component_count(self, accessor_type: str) -> int:
-        """Get the number of components for an accessor type"""
-        type_map = {
-            'SCALAR': 1,
-            'VEC2': 2,
-            'VEC3': 3,
-            'VEC4': 4,
-            'MAT2': 4,
-            'MAT3': 9,
-            'MAT4': 16
-        }
-        return type_map.get(accessor_type, 1)
-    
-    def _get_component_size(self, component_type: int) -> int:
-        """Get the size of a component type in bytes"""
-        size_map = {
-            5120: 1,   # BYTE
-            5121: 1,   # UNSIGNED_BYTE
-            5122: 2,   # SHORT
-            5123: 2,   # UNSIGNED_SHORT
-            5125: 4,   # UNSIGNED_INT
-            5126: 4    # FLOAT
-        }
-        return size_map.get(component_type, 4)
 
 
 class VoxBridgeError(Exception):

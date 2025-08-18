@@ -1091,7 +1091,7 @@ http://creativecommons.org/licenses/by/4.0/
                 "original_source_format": "GLB",
                 "target_platform": platform,
                 "export_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "tool_version": "1.0.3",
+                "tool_version": "1.0.6",
                 "platform_specific_notes": f"Optimized for {platform} with platform-specific requirements",
                 "files_included": [f.name for f in files_to_zip if Path(f).exists()],
                 "platform_requirements": self._get_platform_requirements(platform),
