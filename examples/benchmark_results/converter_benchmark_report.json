@@ -1,7 +1,7 @@
 {
   "benchmark_summary": {
     "total_assets_tested": 2,
-    "benchmark_timestamp": 1755463092.6713276,
+    "benchmark_timestamp": 1755506090.0051992,
     "overall_improvements": {}
   },
   "asset_results": {
@@ -10,7 +10,7 @@
       "original_stats": {
         "file_size": 1113372,
         "file_type": "GLB",
-        "timestamp": 1755463035.824005
+        "timestamp": 1755506058.0452318
       },
       "optimized_stats": {
         "file_size": 2868,
@@ -18,26 +18,26 @@
         "material_count": 1,
         "texture_count": 1,
         "node_count": 2,
-        "timestamp": 1755463035.824784
+        "timestamp": 1755506058.0452924
       },
-      "conversion_timestamp": 1755463035.8248525
+      "conversion_timestamp": 1755506058.045302
     },
     "business_man_model__rigged__free": {
       "asset_name": "business_man_model__rigged__free",
       "original_stats": {
         "file_size": 8763652,
         "file_type": "GLB",
-        "timestamp": 1755463092.6308756
+        "timestamp": 1755506089.9971485
       },
       "optimized_stats": {
-        "file_size": 3318,
+        "file_size": 3316,
         "mesh_count": 1,
         "material_count": 1,
         "texture_count": 2,
         "node_count": 2,
-        "timestamp": 1755463092.631079
+        "timestamp": 1755506089.9971886
       },
-      "conversion_timestamp": 1755463092.6311097
+      "conversion_timestamp": 1755506089.9971957
     }
   },
   "category_summary": {}
