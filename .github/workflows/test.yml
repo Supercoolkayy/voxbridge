@@ -1,0 +1,40 @@
+name: Test Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine pytest
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: python -m twine check dist/*
+
+      - name: List built files
+        run: |
+          echo "Built package files:"
+          ls -la dist/
+          echo "Package contents:"
+          tar -tzf dist/*.tar.gz | head -20
