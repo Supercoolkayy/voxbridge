@@ -1,0 +1,216 @@
+{
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "asset": {
+    "version": "2.0",
+    "generator": "https://github.com/mikedh/trimesh"
+  },
+  "accessors": [
+    {
+      "componentType": 5125,
+      "type": "SCALAR",
+      "bufferView": 0,
+      "count": 15066,
+      "max": [
+        10157
+      ],
+      "min": [
+        0
+      ]
+    },
+    {
+      "componentType": 5126,
+      "type": "VEC3",
+      "byteOffset": 0,
+      "bufferView": 1,
+      "count": 10158,
+      "max": [
+        0.18420709669589996,
+        0.3031368851661682,
+        0.35583120584487915
+      ],
+      "min": [
+        -0.1131369024515152,
+        -0.3738084137439728,
+        -0.3540104031562805
+      ]
+    },
+    {
+      "componentType": 5126,
+      "type": "VEC2",
+      "byteOffset": 0,
+      "bufferView": 4,
+      "count": 10158,
+      "max": [
+        0.5118427872657776,
+        0.6830357313156128
+      ],
+      "min": [
+        0.0356522835791111,
+        0.6830357313156128
+      ]
+    },
+    {
+      "componentType": 5126,
+      "count": 10158,
+      "type": "VEC3",
+      "byteOffset": 0,
+      "bufferView": 5,
+      "max": [
+        0.9996042251586914,
+        0.9994293451309204,
+        0.9981396794319153
+      ],
+      "min": [
+        -0.9996042251586914,
+        -0.9993495345115662,
+        -0.9981396794319153
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Carl.glb",
+      "extras": {
+        "units": "from_gltf_primitive"
+      },
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "indices": 0,
+          "mode": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "images": [
+    {
+      "bufferView": 2,
+      "mimeType": "image/png"
+    },
+    {
+      "bufferView": 3,
+      "mimeType": "image/png"
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "sampler": 0
+    },
+    {
+      "source": 1,
+      "sampler": 0
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 1
+        },
+        "baseColorFactor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "metallicFactor": 1.0,
+        "roughnessFactor": 1.0
+      },
+      "doubleSided": false
+    }
+  ],
+  "nodes": [
+    {
+      "name": "world",
+      "children": [
+        1
+      ]
+    },
+    {
+      "name": "Carl.glb",
+      "mesh": 0
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "gltf_buffer_0.bin",
+      "byteLength": 60264
+    },
+    {
+      "uri": "gltf_buffer_1.bin",
+      "byteLength": 121896
+    },
+    {
+      "uri": "gltf_buffer_2.bin",
+      "byteLength": 140
+    },
+    {
+      "uri": "gltf_buffer_3.bin",
+      "byteLength": 80
+    },
+    {
+      "uri": "gltf_buffer_4.bin",
+      "byteLength": 81264
+    },
+    {
+      "uri": "gltf_buffer_5.bin",
+      "byteLength": 121896
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 60264
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 121896
+    },
+    {
+      "buffer": 2,
+      "byteOffset": 0,
+      "byteLength": 140
+    },
+    {
+      "buffer": 3,
+      "byteOffset": 0,
+      "byteLength": 80
+    },
+    {
+      "buffer": 4,
+      "byteOffset": 0,
+      "byteLength": 81264
+    },
+    {
+      "buffer": 5,
+      "byteOffset": 0,
+      "byteLength": 121896
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9728,
+      "wrapS": 33071,
+      "wrapT": 33071
+    }
+  ]
+}
