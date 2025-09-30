@@ -13,7 +13,8 @@ from typing import Optional
 
 # Import VoxBridge components
 try:
-    from ..converter import VoxBridgeConverter, InputValidationError, ConversionError, BlenderNotFoundError
+    from ..orchestrated_converter import OrchestratedConverter
+    from ..converter import InputValidationError, ConversionError, BlenderNotFoundError
     from .. import __version__
     VOXBRIDGE_AVAILABLE = True
 except ImportError:
@@ -31,7 +32,7 @@ class VoxBridgeGUI:
         self.root.resizable(True, True)
         
         # Initialize converter
-        self.converter = VoxBridgeConverter() if VOXBRIDGE_AVAILABLE else None
+        self.converter = OrchestratedConverter() if VOXBRIDGE_AVAILABLE else None
         
         # Queue for thread communication
         self.message_queue = queue.Queue()
@@ -101,6 +102,18 @@ class VoxBridgeGUI:
         options_frame.columnconfigure(0, weight=1)
         options_frame.columnconfigure(1, weight=1)
         
+        # Speed mode selection
+        speed_frame = ttk.LabelFrame(options_frame, text="Speed Mode", padding="5")
+        speed_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        
+        self.speed_mode_var = tk.StringVar(value="fast")
+        ttk.Radiobutton(speed_frame, text="Fast (512px textures, minimal processing)", 
+                       variable=self.speed_mode_var, value="fast").pack(anchor=tk.W)
+        ttk.Radiobutton(speed_frame, text="Balanced (1024px textures, medium processing)", 
+                       variable=self.speed_mode_var, value="balanced").pack(anchor=tk.W)
+        ttk.Radiobutton(speed_frame, text="Full (2048px textures, maximum processing)", 
+                       variable=self.speed_mode_var, value="full").pack(anchor=tk.W)
+        
         # Checkboxes
         self.optimize_mesh_var = tk.BooleanVar()
         self.generate_atlas_var = tk.BooleanVar()
@@ -109,12 +122,12 @@ class VoxBridgeGUI:
         self.report_var = tk.BooleanVar()
         self.verbose_var = tk.BooleanVar()
         
-        ttk.Checkbutton(options_frame, text="Optimize Mesh", variable=self.optimize_mesh_var).grid(row=0, column=0, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Generate Atlas", variable=self.generate_atlas_var).grid(row=0, column=1, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Compress Textures", variable=self.compress_textures_var).grid(row=1, column=0, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="No Blender", variable=self.no_blender_var).grid(row=1, column=1, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Generate Report", variable=self.report_var).grid(row=2, column=0, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Verbose Output", variable=self.verbose_var).grid(row=2, column=1, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Optimize Mesh", variable=self.optimize_mesh_var).grid(row=1, column=0, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Generate Atlas", variable=self.generate_atlas_var).grid(row=1, column=1, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Compress Textures", variable=self.compress_textures_var).grid(row=2, column=0, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="No Blender", variable=self.no_blender_var).grid(row=2, column=1, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Generate Report", variable=self.report_var).grid(row=3, column=0, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Verbose Output", variable=self.verbose_var).grid(row=3, column=1, sticky=tk.W)
         
         # Buttons frame
         buttons_frame = ttk.Frame(main_frame)
@@ -344,31 +357,63 @@ class VoxBridgeGUI:
                     output_file = output_folder / f"{input_file.stem}_{target}"
                     
                     try:
-                        use_blender = not no_blender
-                        success = self.converter.convert_file(
-                            input_file, output_file, use_blender,
-                            optimize_mesh=optimize_mesh,
-                            generate_atlas=self.generate_atlas_var.get(),
-                            platform=target
+                        # Use the same orchestrated conversion path as CLI
+                        speed_mode = self.speed_mode_var.get()
+                        options = {
+                            'optimize_mesh': optimize_mesh,
+                            'generate_atlas': self.generate_atlas_var.get(),
+                            'no_blender': no_blender,
+                            'compress_textures': self.compress_textures_var.get(),
+                            'verbose': verbose
+                        }
+                        
+                        # Set speed mode
+                        if speed_mode == "fast":
+                            options['fast'] = True
+                        elif speed_mode == "balanced":
+                            options['balanced'] = True
+                        elif speed_mode == "full":
+                            options['full'] = True
+                        
+                        result = self.converter.convert_file(
+                            input_file, output_folder, target, options
                         )
+                        success = result.get('success', False)
                         
                         if success:
                             successful_conversions += 1
                             self.log_message(f"✓ {input_file.name} converted successfully!", "success")
                             
-                            # Check if ZIP was created (converter creates zip files)
-                            zip_path = output_file.with_suffix('.zip')
-                            if zip_path.exists():
-                                self.log_message(f"  → Packaged into {zip_path.name}", "info")
-                            else:
-                                # Check for .gltf file as fallback
-                                gltf_path = output_file.with_suffix('.gltf')
-                                if gltf_path.exists():
-                                    self.log_message(f"  → Output saved as {gltf_path.name}", "info")
+                            # Get output path from result
+                            output_path = result.get('output_path', '')
+                            if output_path:
+                                output_file_path = Path(output_path)
+                                if output_file_path.exists():
+                                    self.log_message(f"  → Packaged into {output_file_path.name}", "info")
+                                    
+                                    # Show processing time if available
+                                    if 'processing_time' in result:
+                                        self.log_message(f"  → Processing time: {result['processing_time']:.1f}s", "info")
+                                    
+                                    # Show optimization results if available
+                                    if 'optimization_metrics' in result:
+                                        metrics = result['optimization_metrics']
+                                        if 'textureReduction' in metrics:
+                                            self.log_message(f"  → Texture reduction: {metrics['textureReduction']:.1f}%", "info")
+                                        if 'triangleReduction' in metrics:
+                                            self.log_message(f"  → Triangle reduction: {metrics['triangleReduction']:.1f}%", "info")
+                                    
+                                    # Show warnings if any
+                                    if 'warnings' in result and result['warnings']:
+                                        for warning in result['warnings']:
+                                            self.log_message(f"  → Warning: {warning}", "warning")
                                 else:
-                                    self.log_message(f"  → Output saved to {output_file}", "info")
+                                    self.log_message(f"  → Output saved to {output_path}", "info")
+                            else:
+                                self.log_message(f"  → Output saved to {output_file}", "info")
                         else:
-                            self.log_message(f"✗ {input_file.name} conversion failed!", "error")
+                            error_msg = result.get('error', 'Unknown error')
+                            self.log_message(f"✗ {input_file.name} conversion failed: {error_msg}", "error")
                             
                     except Exception as e:
                         self.log_message(f"✗ Error converting {input_file.name}: {e}", "error")
@@ -428,6 +473,7 @@ class VoxBridgeGUI:
         self.input_var.set("")
         self.output_var.set("")
         self.target_var.set("unity")
+        self.speed_mode_var.set("fast")
         self.optimize_mesh_var.set(False)
         self.generate_atlas_var.set(False)
         self.compress_textures_var.set(False)

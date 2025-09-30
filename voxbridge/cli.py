@@ -22,11 +22,13 @@ try:
     from rich.panel import Panel
     from rich.text import Text
     from rich.table import Table
+    from rich import box
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
 
 from .converter import VoxBridgeConverter
+from .orchestrated_converter import OrchestratedConverter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -42,34 +44,62 @@ app = Typer(
 # Global console for rich output
 console = Console(emoji=False, width=80)
 
-def print_header(verbose: bool = False):
-    """Print the VoxBridge header with box-drawing characters."""
-    if verbose:
-        title = "VoxBridge Converter v1.0.8 (Verbose Mode)"
+def print_fancy_header(verbose: bool = False):
+    """Print a fancy application header with visual effects"""
+    if RICH_AVAILABLE:
+        if verbose:
+            # Beautiful verbose header
+            header_panel = Panel.fit(
+                "[bold bright_blue]VoxBridge Converter v2.0.0 - Next Generation 3D Processing[/bold bright_blue]\n\n"
+                "[cyan]Advanced GLB ➜ GLTF / Roblox / Unity Exporter[/cyan]\n"
+                "[dim]Smart Detection • Lightning Fast • Beautiful Output[/dim]\n"
+                "[dim]Auto-Routing • Comprehensive Reports • Optimized Performance[/dim]",
+                title="[bold white]VoxBridge v2.0.0[/bold white]",
+                border_style="bright_blue",
+                padding=(1, 2)
+            )
+            console.print(header_panel)
+        else:
+            # Compact version for non-verbose mode
+            console.print(Panel.fit(
+                "[bold bright_blue]VoxBridge Converter v2.0.0[/bold bright_blue]\n"
+                "[dim]Advanced 3D Model Processing Pipeline[/dim]",
+                border_style="bright_blue"
+            ))
     else:
-        title = "VoxBridge Converter v1.0.8"
-    
-    subtitle = "GLB ➜ GLTF / Roblox / Unity Exporter"
-    
-    header = f"""
-{'═' * 55}
-   {title}
-   {subtitle}
-{'═' * 55}"""
-    
-    console.print(header, style="bold blue")
+        print("VoxBridge Converter v2.0.0 - Next Generation 3D Processing")
+        if verbose:
+            print("Advanced GLB ➜ GLTF / Roblox / Unity Exporter")
+
+def print_header(verbose: bool = False):
+    """Legacy header function for backward compatibility"""
+    print_fancy_header(verbose)
 
 def print_file_config(input_path: Path, output_path: Path, target: str, optimize_mesh: bool = False):
-    """Print file configuration in a clean format."""
-    config = f"""
+    """Print file configuration in a beautiful format."""
+    if RICH_AVAILABLE:
+        # Create a beautiful configuration table
+        config_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+        config_table.add_column(style="bright_cyan", width=12)
+        config_table.add_column(style="white")
+        
+        config_table.add_row("Input:", str(input_path))
+        config_table.add_row("Output:", str(output_path))
+        config_table.add_row("Target:", target.upper())
+        if optimize_mesh:
+            config_table.add_row("Mode:", "Optimized")
+        
+        console.print(config_table)
+    else:
+        config = f"""
 Input : {input_path}
 Output: {output_path}
 Target: {target}"""
-    
-    if optimize_mesh:
-        config += "\nOpts : mesh optimization enabled"
-    
-    console.print(config, style="dim")
+        
+        if optimize_mesh:
+            config += "\nOpts : mesh optimization enabled"
+        
+        console.print(config, style="dim")
 
 def print_step_header(step_num: int, total_steps: int, title: str):
     """Print a step header with consistent formatting."""
@@ -323,11 +353,22 @@ def handle_conversion(
 @app.command()
 def convert(
     input_file: Path = typer.Option(..., "--input", "-i", help="Input GLB file path"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory path"),
     target: str = typer.Option("unity", "--target", "-t", help="Target platform (unity/roblox)"),
     optimize_mesh: bool = typer.Option(False, "--optimize-mesh", help="Enable mesh optimization"),
     generate_atlas: bool = typer.Option(False, "--generate-atlas", help="Generate texture atlas for optimization"),
     no_blender: bool = typer.Option(False, "--no-blender", help="Skip Blender processing"),
+    force_static: bool = typer.Option(False, "--force-static", help="Force static processing path (Trimesh)"),
+    force_node: bool = typer.Option(False, "--force-node", help="Force complex processing path (Node.js)"),
+    pack_glb: bool = typer.Option(False, "--pack-glb", help="Pack output into single GLB file"),
+    use_draco: bool = typer.Option(True, "--use-draco", help="Enable Draco compression"),
+    no_draco: bool = typer.Option(False, "--no-draco", help="Disable Draco compression"),
+    texture_size: int = typer.Option(1024, "--texture-size", help="Maximum texture size"),
+    quantize: bool = typer.Option(True, "--quantize", help="Enable quantization"),
+    fast: bool = typer.Option(False, "--fast", help="Fast mode: skip Draco, minimal validation, smaller textures (512px)"),
+    balanced: bool = typer.Option(False, "--balanced", help="Balanced mode: medium compression, medium speed (1024px)"),
+    full: bool = typer.Option(False, "--full", help="Full mode: all optimizations, larger textures (2048px)"),
+    keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep intermediate files for debugging"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug output")
 ):
@@ -341,55 +382,215 @@ def convert(
     else:
         logging.getLogger().setLevel(logging.WARNING)
     
-    # Determine output path
+    # Determine output directory
     if output is None:
-        output = input_file.with_suffix('.gltf')
+        output_dir = input_file.parent / f"{input_file.stem}_output"
     else:
-        # Always ensure output has .gltf extension
-        if not output.suffix:
-            output = output.with_suffix('.gltf')
-        elif output.suffix.lower() == '.glb':
-            # Convert .glb to .gltf since we don't generate GLB files
-            output = output.with_suffix('.gltf')
+        if output.is_file():
+            output_dir = output.parent
+        else:
+            output_dir = output
+    
+    # Validate target platform
+    valid_targets = ["unity", "roblox"]
+    if target.lower() not in valid_targets:
+        console.print(f"[bold red]Error: Invalid target platform '{target}'")
+        console.print(f"[yellow]Valid targets are: {', '.join(valid_targets)}")
+        raise typer.Exit(1)
     
     # Check if input file exists
     if not input_file.exists():
         console.print(f"[bold red]Error: Input file '{input_file}' does not exist")
         raise typer.Exit(1)
     
-    # Check if input file is a GLB file
-    if input_file.suffix.lower() != '.glb':
-        console.print(f"[bold red]Error: Input file '{input_file}' is not a GLB file. Only .glb files are supported.")
+    # Check if input file is a GLB/GLTF file
+    if input_file.suffix.lower() not in ['.glb', '.gltf']:
+        console.print(f"[bold red]Error: Input file '{input_file}' is not a GLB/GLTF file.")
         raise typer.Exit(1)
     
-    # Check if output file exists and ask for confirmation
-    if output.exists():
-        try:
-            response = input(f"Warning: Output file '{output}' already exists. Overwrite? [y/N]: ")
-            if response.lower() not in ['y', 'yes']:
-                console.print("[yellow]Operation cancelled")
-                raise typer.Exit(0)
-        except (EOFError, KeyboardInterrupt):
-            console.print("\n[yellow]Operation cancelled")
-            raise typer.Exit(0)
+    # Create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Print header and configuration
-    print_header(verbose)
-    print_file_config(input_file, output, target, optimize_mesh)
+    # Print fancy header and configuration
+    print_fancy_header(verbose)
+    print_file_config(input_file, output_dir, target, optimize_mesh)
     
-    # Handle conversion
-    success = handle_conversion(
-        input_path=input_file,
-        output_path=output,
-        target=target,
-        optimize_mesh=optimize_mesh,
-        generate_atlas=generate_atlas,
-        no_blender=no_blender,
-        verbose=verbose,
-        debug=debug
-    )
+    # Prepare conversion options
+    options = {
+        'optimize_mesh': optimize_mesh,
+        'generate_atlas': generate_atlas,
+        'no_blender': no_blender,
+        'force_static': force_static,
+        'force_node': force_node,
+        'pack_glb': pack_glb,
+        'use_draco': use_draco and not no_draco,
+        'texture_size': texture_size,
+        'quantize': quantize,
+        'fast': fast,
+        'balanced': balanced,
+        'full': full,
+        'keep_temp': keep_temp,
+        'debug': debug
+    }
     
-    if not success:
+    # Apply speed mode settings
+    if fast:
+        options['use_draco'] = False
+        options['quantize'] = False
+        options['optimize_mesh'] = False
+        options['generate_atlas'] = False
+        options['texture_size'] = 512  # Smaller textures for speed
+    elif balanced:
+        options['use_draco'] = True
+        options['quantize'] = True
+        options['optimize_mesh'] = True
+        options['generate_atlas'] = False
+        options['texture_size'] = 1024  # Medium textures for balance
+    elif full:
+        options['use_draco'] = True
+        options['quantize'] = True
+        options['optimize_mesh'] = True
+        options['generate_atlas'] = True
+        options['texture_size'] = 2048  # Larger textures for quality
+    
+    # Use orchestrated converter
+    converter = OrchestratedConverter(debug=debug)
+    
+    try:
+        # Show processing with fancy progress
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Processing model...", total=None)
+            
+            result = converter.convert_file(input_file, output_dir, target, options)
+            
+            progress.update(task, description="Conversion completed!")
+        
+        if result['success']:
+            # Simplified success message
+            success_panel = Panel.fit(
+                f"[bold green]Success: Your package is ready![/bold green]\n\n"
+                f"Import this file into {target.upper()}: [bold cyan]{result.get('output_path', 'Unknown')}[/bold cyan]\n\n"
+                f"[dim]Processing time: {result.get('processing_time', 0):.2f}s[/dim]",
+                title="Success",
+                border_style="green"
+            )
+            console.print(success_panel)
+            
+            if result.get('fallback_used'):
+                console.print("[yellow]Note: Fallback processing was used[/yellow]")
+            
+            # Only show detailed information in debug mode
+            if debug:
+                # Show warnings with severity differentiation
+                warnings = result.get('warnings', [])
+                if warnings:
+                    critical_warnings = [w for w in warnings if any(keyword in w.lower() for keyword in ['error', 'failed', 'critical', 'fatal'])]
+                    advisory_warnings = [w for w in warnings if w not in critical_warnings]
+                    
+                    if critical_warnings:
+                        console.print(f"[red]Critical Issues: {len(critical_warnings)}[/red]")
+                        for warning in critical_warnings:
+                            console.print(f"  [red]⚠ {warning}[/red]")
+                    
+                    if advisory_warnings:
+                        console.print(f"[yellow]Advisory Warnings: {len(advisory_warnings)}[/yellow]")
+                        for warning in advisory_warnings:
+                            console.print(f"  [yellow]⚠ {warning}[/yellow]")
+                
+                # Show post-validation results
+                if 'post_validation' in result:
+                    post_validation = result['post_validation']
+                    if post_validation.get('validation_info'):
+                        validation_info = post_validation['validation_info']
+                        
+                        # Create validation info table
+                        validation_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+                        validation_table.add_column(style="bright_cyan", width=20)
+                        validation_table.add_column(style="white")
+                        
+                        # Add relevant info based on conversion type
+                        if 'textures' in validation_info:
+                            validation_table.add_row("Textures:", str(validation_info['textures']))
+                        if 'materials' in validation_info:
+                            validation_table.add_row("Materials:", str(validation_info['materials']))
+                        if 'nodes' in validation_info:
+                            validation_table.add_row("Nodes:", str(validation_info['nodes']))
+                        if 'meshes' in validation_info:
+                            validation_table.add_row("Meshes:", str(validation_info['meshes']))
+                        if 'total_bones' in validation_info:
+                            validation_table.add_row("Bones:", str(validation_info['total_bones']))
+                        if 'animations' in validation_info:
+                            validation_table.add_row("Animations:", str(validation_info['animations']))
+                        if 'draco_compression' in validation_info:
+                            validation_table.add_row("Draco:", "Yes" if validation_info['draco_compression'] else "No")
+                        if 'file_size_mb' in validation_info:
+                            validation_table.add_row("Size:", f"{validation_info['file_size_mb']:.1f} MB")
+                        
+                        if validation_table.rows:
+                            console.print("\n[bold blue]Post-Validation Analysis:[/bold blue]")
+                            console.print(validation_table)
+                
+                # Show package info
+                if 'package_info' in result:
+                    package_info = result['package_info']
+                    if package_info.get('structure'):
+                        structure = package_info['structure']
+                        package_table = Table(show_header=False, box=box.ROUNDED, padding=(0, 1))
+                        package_table.add_column(style="bright_cyan", width=20)
+                        package_table.add_column(style="white")
+                        
+                        package_table.add_row("Package Type:", "ZIP Archive")
+                        package_table.add_row("Model File:", "Yes" if structure.get('model') else "No")
+                        package_table.add_row("Textures:", "Yes" if structure.get('textures') else "No")
+                        package_table.add_row("Report:", "Yes" if structure.get('report') else "No")
+                        package_table.add_row("Total Files:", str(len(package_info.get('files', []))))
+                        
+                        console.print("\n[bold blue]Package Structure:[/bold blue]")
+                        console.print(package_table)
+                
+                # Show report file location
+                report_path = output_dir / 'voxbridge_report.json'
+                if report_path.exists():
+                    console.print(f"\n[dim]Detailed report saved to: {report_path}[/dim]")
+            else:
+                # Show only critical warnings in non-debug mode
+                warnings = result.get('warnings', [])
+                critical_warnings = [w for w in warnings if any(keyword in w.lower() for keyword in ['error', 'failed', 'critical', 'fatal'])]
+                if critical_warnings:
+                    console.print(f"[red]Critical Issues: {len(critical_warnings)}[/red]")
+                    for warning in critical_warnings:
+                        console.print(f"  [red]⚠ {warning}[/red]")
+        else:
+            # Error panel
+            error_panel = Panel.fit(
+                f"[bold red]Conversion failed![/bold red]\n\n"
+                f"[red]Error:[/red] {result.get('error', 'Unknown error')}\n\n"
+                f"[dim]Please check the input file and try again.[/dim]",
+                title="Error",
+                border_style="red"
+            )
+            console.print(error_panel)
+            raise typer.Exit(1)
+            
+    except Exception as e:
+        error_panel = Panel.fit(
+            f"[bold red]Conversion failed with exception![/bold red]\n\n"
+            f"[red]Error:[/red] {str(e)}\n\n"
+            f"[dim]Please check the input file and try again.[/dim]",
+            title="Error",
+            border_style="red"
+        )
+        console.print(error_panel)
+        
+        if debug:
+            logger.exception("Conversion exception:")
         raise typer.Exit(1)
 
 @app.command()
@@ -581,6 +782,74 @@ def doctor():
             console.print("  ✗ Node.js: not found")
     except:
         console.print("  ✗ Node.js: detection failed")
+
+@app.command("selftest")
+def selftest():
+    """Test VoxBridge integration (Python + Node.js)"""
+    console = Console()
+    
+    console.print("\n[bold blue]VoxBridge Self-Test[/bold blue]")
+    console.print("=" * 50)
+    
+    # Test Python imports
+    console.print("\n[bold]Testing Python Integration:[/bold]")
+    try:
+        from .orchestrated_converter import OrchestratedConverter
+        from .utils.paths import get_node_runner_path, is_bundled
+        console.print("  ✓ Python modules imported successfully")
+    except Exception as e:
+        console.print(f"  ✗ Python import failed: {e}")
+        return
+    
+    # Test Node.js runner
+    console.print("\n[bold]Testing Node.js Integration:[/bold]")
+    try:
+        node_runner_path = get_node_runner_path()
+        console.print(f"  Node runner path: {node_runner_path}")
+        
+        if node_runner_path.exists():
+            console.print("  ✓ Node runner found")
+            
+            # Test version command
+            import subprocess
+            result = subprocess.run([str(node_runner_path), '--version'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                console.print(f"  ✓ Node runner version: {result.stdout.strip()}")
+            else:
+                console.print(f"  ✗ Node runner version failed: {result.stderr}")
+                return
+        else:
+            console.print("  ✗ Node runner not found")
+            return
+            
+    except Exception as e:
+        console.print(f"  ✗ Node.js test failed: {e}")
+        return
+    
+    # Test bundled status
+    console.print("\n[bold]Testing Bundle Status:[/bold]")
+    if is_bundled():
+        console.print("  ✓ Running as bundled executable")
+    else:
+        console.print("  ℹ Running as development script")
+    
+    # Test converter initialization
+    console.print("\n[bold]Testing Converter Initialization:[/bold]")
+    try:
+        converter = OrchestratedConverter(debug=True)
+        console.print("  ✓ OrchestratedConverter initialized")
+        
+        if converter.node_available:
+            console.print("  ✓ Node.js processing available")
+        else:
+            console.print("  ⚠ Node.js processing not available")
+            
+    except Exception as e:
+        console.print(f"  ✗ Converter initialization failed: {e}")
+        return
+    
+    console.print("\n[bold green]✅ All tests passed! VoxBridge is ready.[/bold green]")
 
 def main():
     """Main entry point for the CLI."""

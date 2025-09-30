@@ -1,33 +1,106 @@
-name: Publish to PyPI (Trusted Publisher)
+name: Publish VoxBridge
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*.."
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write  # REQUIRED for trusted publishing
-      contents: read
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: node18-linux-x64
+            ext: ""
+          - os: macos-latest
+            target: node18-macos-x64
+            ext: ""
+          - os: windows-latest
+            target: node18-win-x64
+            ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # -----------------------
+      # Node.js setup
+      # -----------------------
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.x'
+          node-version: 18
 
-      - name: Install build dependencies
+      - name: Install Node deps
+        run: npm install
+
+      - name: Build Node runner with pkg
+        run: |
+          npx pkg node_scripts/index.js --targets ${{ matrix.target }} --output node_runner${{ matrix.ext }}
+
+      # -----------------------
+      # Python setup
+      # -----------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            pip install -r requirements-freeze.txt
+          else
+            pip install -r requirements.txt
+          fi
+          pip install pyinstaller
 
-      - name: Build the package
-        run: python -m build
+      # ----------------- CLI BUILD -----------------
+      - name: Build CLI Executable
+        run: |
+          pyinstaller --clean -y \
+            --distpath dist_${{ matrix.os }} \
+            --workpath build_${{ matrix.os }} \
+            --onefile \
+            --console \
+            --name voxbridge \
+            --add-data "voxbridge;voxbridge" \
+            --add-binary "node_runner${{ matrix.ext }}:." \
+            cli_entry.py
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      # ----------------- GUI BUILD -----------------
+      - name: Build GUI Executable
+        run: |
+          pyinstaller --clean -y \
+            --distpath dist_${{ matrix.os }} \
+            --workpath build_${{ matrix.os }} \
+            --onefile \
+            --windowed \
+            --name voxbridge-gui \
+            --add-data "voxbridge;voxbridge" \
+            --add-binary "node_runner${{ matrix.ext }}:." \
+            gui_entry.py
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxbridge-${{ matrix.os }}
+          path: dist_${{ matrix.os }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./release//*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

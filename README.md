@@ -20,6 +20,25 @@ VoxBridge is a professional tool that converts 3D models exported from The Sandb
 
 > ⚠️ **Important**: VoxBridge only works with GLB files exported from The Sandbox VoxEdit. Other formats like OBJ, FBX, or random 3D models are not supported at this stage.
 
+## 🧠 Smart Conversion System
+
+VoxBridge now features an intelligent conversion system that automatically detects the complexity of your 3D models and routes them through the optimal processing path:
+
+**🔍 Automatic Detection:**
+
+- **Static Models**: Simple models without animations, skins, or morph targets
+- **Complex Models**: Models with animations, rigging, morph targets, or advanced materials
+
+**⚡ Processing Paths:**
+
+- **Static Path**: Fast Trimesh-based processing for simple models
+- **Complex Path**: Full Node.js processing with glTF-Transform for advanced features
+
+**🎛️ Manual Override:**
+
+- `--force-static`: Force static processing (faster, but may lose complex features)
+- `--force-node`: Force complex processing (slower, but preserves all features)
+
 ## 🖥️ Two Ways to Use VoxBridge
 
 **For Creators (No Terminal Required):**
@@ -129,8 +148,21 @@ VoxBridge is a professional tool that converts 3D models exported from The Sandb
 # Get help
 ./voxbridge --help
 
-# Convert single file
-./voxbridge convert --input model.glb --output model.gltf --target roblox
+# Convert single file (automatic routing)
+./voxbridge convert --input model.glb --output-dir ./output --target roblox
+
+# Force static processing (faster)
+./voxbridge convert --input model.glb --output-dir ./output --target unity --force-static
+
+# Force complex processing (preserves animations)
+./voxbridge convert --input model.glb --output-dir ./output --target roblox --force-node
+
+# Pack output into single GLB file
+./voxbridge convert --input model.glb --output-dir ./output --target unity --pack-glb
+
+# Advanced options
+./voxbridge convert --input model.glb --output-dir ./output --target roblox \
+  --optimize-mesh --texture-size 512 --use-draco --quantize
 
 # Batch convert folder
 ./voxbridge batch ./input_folder --output-dir ./output_folder --target unity
@@ -139,8 +171,20 @@ VoxBridge is a professional tool that converts 3D models exported from The Sandb
 ./voxbridge doctor
 
 # Verbose output
-./voxbridge convert --input model.glb --output model.gltf --target unity --verbose
+./voxbridge convert --input model.glb --output-dir ./output --target unity --verbose
 ```
+
+### 🎛️ New CLI Flags
+
+| Flag             | Description                             | Default     |
+| ---------------- | --------------------------------------- | ----------- |
+| `--force-static` | Force static processing path (Trimesh)  | Auto-detect |
+| `--force-node`   | Force complex processing path (Node.js) | Auto-detect |
+| `--pack-glb`     | Pack output into single GLB file        | False       |
+| `--use-draco`    | Enable Draco compression                | True        |
+| `--no-draco`     | Disable Draco compression               | False       |
+| `--texture-size` | Maximum texture size (pixels)           | 1024        |
+| `--quantize`     | Enable quantization                     | True        |
 
 > 📖 **Need more command details?** See [Usage Guide](docs/usage.md) for comprehensive CLI documentation and advanced options.
 
