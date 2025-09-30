@@ -83,11 +83,17 @@ jobs:
             --add-binary "node_runner${{ matrix.ext }}:." \
             gui_entry.py
 
+      # ----------------- PACKAGE -----------------
+      - name: Package artifacts
+        run: |
+          cd dist_${{ matrix.os }}
+          zip -r ../voxbridge-${{ matrix.os }}.zip .
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: voxbridge-${{ matrix.os }}
-          path: dist_${{ matrix.os }}
+          path: voxbridge-${{ matrix.os }}.zip
 
   release:
     needs: build
@@ -101,6 +107,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./release//*
+          files: ./release//*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
