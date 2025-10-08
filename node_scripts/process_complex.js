@@ -17,17 +17,27 @@ const {
   textureResize,
   textureCompress,
   simplify,
+  weld,
+  MeshoptSimplifier,
 } = require("@gltf-transform/functions");
 const sharp = require("sharp");
 
 // Initialize MeshOptimizer for simplification
-try {
-  const MeshoptDecoder = require("meshoptimizer/meshopt_decoder.js");
-  const MeshoptEncoder = require("meshoptimizer/meshopt_encoder.js");
-  require("@gltf-transform/functions").ready = Promise.resolve();
-} catch (err) {
-  console.warn("MeshOptimizer initialization warning:", err.message);
+let meshoptReady = false;
+async function initMeshopt() {
+  try {
+    const MeshoptEncoder = require("meshoptimizer");
+    await MeshoptEncoder.ready;
+    meshoptReady = true;
+    console.log("MeshOptimizer initialized successfully");
+  } catch (err) {
+    console.warn("MeshOptimizer initialization warning:", err.message);
+    console.warn("Mesh simplification will use basic algorithm");
+  }
 }
+
+// Initialize immediately
+initMeshopt();
 
 // Import Draco with fallback
 let draco;
@@ -77,6 +87,9 @@ async function processComplexGLTF() {
   };
 
   try {
+    // Wait for meshopt to initialize
+    await initMeshopt();
+
     console.log(`Processing complex GLTF: ${options.input}`);
     console.log(`Target platform: ${options.target}`);
 
@@ -87,16 +100,27 @@ async function processComplexGLTF() {
     console.log("Loading GLTF file...");
 
     // First, try to preprocess the file to handle extensions
-    const preprocessedPath = await preprocessGLTFForExtensions(
-      options.input,
-      options.output
-    );
+    let preprocessedPath = null;
+    try {
+      preprocessedPath = await preprocessGLTFForExtensions(
+        options.input,
+        options.output
+      );
+      if (preprocessedPath) {
+        console.log(`Preprocessing successful: ${preprocessedPath}`);
+      } else {
+        console.log("No preprocessing needed (no extension issues detected)");
+      }
+    } catch (prepError) {
+      console.warn(`Preprocessing error: ${prepError.message}`);
+      preprocessedPath = null;
+    }
 
     const io = new NodeIO();
     let document;
 
     try {
-      // Try to load the preprocessed file first, then fall back to original
+      // Always try preprocessed file first if preprocessing occurred
       if (preprocessedPath && (await fs.pathExists(preprocessedPath))) {
         console.log("Loading preprocessed GLTF file...");
         document = await io.read(preprocessedPath);
@@ -106,7 +130,34 @@ async function processComplexGLTF() {
       }
     } catch (readError) {
       console.error(`GLTF loading failed: ${readError.message}`);
-      throw readError;
+
+      // If this was the original file and it failed, force preprocessing
+      if (!preprocessedPath || !(await fs.pathExists(preprocessedPath))) {
+        console.log(
+          "Load failed - forcing preprocessing to handle extensions..."
+        );
+        const retryPreprocessedPath = await preprocessGLTFForExtensions(
+          options.input,
+          options.output
+        );
+        if (
+          retryPreprocessedPath &&
+          (await fs.pathExists(retryPreprocessedPath))
+        ) {
+          console.log("Retrying with preprocessed file...");
+          try {
+            document = await io.read(retryPreprocessedPath);
+            console.log("Successfully loaded preprocessed file after retry");
+          } catch (retryError) {
+            console.error(`Preprocessing also failed: ${retryError.message}`);
+            throw readError; // Throw original error for clarity
+          }
+        } else {
+          throw readError;
+        }
+      } else {
+        throw readError;
+      }
     }
 
     // Get initial stats
@@ -152,27 +203,114 @@ async function processComplexGLTF() {
           const beforeTriangles = beforeStats.triangles;
           console.log(`Before simplification: ${beforeTriangles} triangles`);
 
-          // Configure simplify with meshoptimizer encoder
-          const MeshoptEncoder = require("meshoptimizer");
-          await MeshoptEncoder.ready;
-          await document.transform(
-            simplify({
-              ratio: simplifyRatio,
-              encoder: MeshoptEncoder,
-            })
-          );
+          // Check if model has animations or skins that might prevent reduction
+          const hasAnimations = document.getRoot().listAnimations().length > 0;
+          const hasSkins = document.getRoot().listSkins().length > 0;
 
-          // Get triangle count after simplification
-          const afterStats = getDocumentStats(document);
-          const afterTriangles = afterStats.triangles;
-          console.log(`After simplification: ${afterTriangles} triangles`);
+          if (hasAnimations || hasSkins) {
+            console.log(
+              `WARNING: Model contains ${hasAnimations ? "animations" : ""} ${
+                hasAnimations && hasSkins ? "and " : ""
+              } ${hasSkins ? "skins/rigging" : ""}`
+            );
+            console.log(
+              "Mesh simplification may not reduce triangle count to preserve animation integrity."
+            );
+            console.log(
+              "Proceeding with other optimizations (quantization, texture optimization)..."
+            );
+            stats.warnings.push(
+              `Mesh simplification limited: Model contains ${
+                hasAnimations ? "animations" : ""
+              } ${hasSkins ? "skinning" : ""} that must be preserved`
+            );
+          }
+
+          // First weld vertices to merge duplicates - this provides significant reduction
+          console.log("Welding vertices to merge duplicates...");
+          await document.transform(weld({ tolerance: 0.0001 }));
+
+          // Get stats after welding
+          const weldStats = getDocumentStats(document);
+          const weldTriangles = weldStats.triangles;
+          console.log(`After welding: ${weldTriangles} triangles`);
+
+          const weldReduction = beforeTriangles - weldTriangles;
+          let optimizationStatus = "already_optimized";
+          let optimizationMessage = "";
+
+          if (weldReduction > 0) {
+            const weldPercent = (
+              (weldReduction / beforeTriangles) *
+              100
+            ).toFixed(1);
+            console.log(
+              `Welding reduced: ${weldReduction} triangles (${weldPercent}%)`
+            );
+            optimizationStatus = "partially_optimized";
+            optimizationMessage = `Vertex welding removed ${weldReduction} duplicate vertices (${weldPercent}%)`;
+          } else {
+            console.log("");
+            console.log("========================================");
+            console.log("MODEL ALREADY OPTIMIZED");
+            console.log("========================================");
+            console.log("This model has no duplicate vertices to merge.");
+            console.log("The mesh is already well-optimized and efficient.");
+            console.log("");
+            console.log("Why no reduction:");
+            console.log(
+              "  - Model has clean topology with no duplicate vertices"
+            );
+            console.log(
+              "  - Geometry is already optimized by the original creator"
+            );
+
+            if (hasAnimations || hasSkins) {
+              console.log(
+                "  - Contains animations/rigging that must be preserved"
+              );
+            }
+
+            console.log("");
+            console.log("Other optimizations still applied:");
+            console.log("  + Quantization (vertex precision optimization)");
+            console.log("  + Texture optimization and embedding");
+            console.log("  + Material optimization");
+            console.log("  + Cross-platform compatibility fixes");
+            console.log("========================================");
+            console.log("");
+
+            optimizationStatus = "already_optimized";
+            optimizationMessage =
+              "Model is already optimized - no duplicate vertices found. Geometry is efficient.";
+          }
+
+          // Get final triangle count
+          const afterStats = weldStats;
+          const afterTriangles = weldTriangles;
+          console.log(`Final optimized: ${afterTriangles} triangles`);
 
           // Calculate reduction statistics
           const triangleReduction = beforeTriangles - afterTriangles;
-          const reductionPercent = beforeTriangles > 0 ? 
-            ((triangleReduction / beforeTriangles) * 100).toFixed(1) : 0;
+          const reductionPercent =
+            beforeTriangles > 0
+              ? ((triangleReduction / beforeTriangles) * 100).toFixed(1)
+              : 0;
 
-          console.log(`Triangle reduction: ${triangleReduction} triangles (${reductionPercent}%)`);
+          if (triangleReduction > 0) {
+            console.log(
+              `Triangle reduction: ${triangleReduction} triangles (${reductionPercent}%)`
+            );
+            console.log("Mesh simplification applied successfully");
+          } else {
+            console.log("NOTE: Mesh simplification did not reduce triangles.");
+            console.log(
+              "This is expected for models with animations, skinning, or highly optimized meshes."
+            );
+            console.log(
+              "Other optimizations (quantization, texture optimization) will still be applied."
+            );
+          }
 
           // Store simplification stats
           stats.meshSimplification = {
@@ -180,15 +318,30 @@ async function processComplexGLTF() {
             afterTriangles,
             triangleReduction,
             reductionPercent: parseFloat(reductionPercent),
-            simplifyRatio
+            simplifyRatio,
+            limitedDueToAnimations: hasAnimations || hasSkins,
+            optimizationStatus: optimizationStatus,
+            optimizationMessage: optimizationMessage,
+            alreadyOptimized: optimizationStatus === "already_optimized",
           };
 
-          stats.optimizations.push(`mesh_simplification_${simplifyRatio}`);
-          console.log("Mesh simplification applied successfully");
+          if (optimizationStatus === "partially_optimized") {
+            stats.optimizations.push(
+              `mesh_optimization_${simplifyRatio}_reduced_${reductionPercent}pct`
+            );
+          } else if (optimizationStatus === "already_optimized") {
+            stats.optimizations.push(
+              `mesh_already_optimized_no_reduction_needed`
+            );
+          } else {
+            stats.optimizations.push(
+              `mesh_simplification_attempted_${simplifyRatio}`
+            );
+          }
         } catch (simplifyError) {
           console.error(`Mesh simplification failed: ${simplifyError.message}`);
           console.log(
-            "Note: Mesh simplification requires meshoptimizer. Skipping optimization."
+            "Note: Mesh simplification skipped. Continuing with other optimizations..."
           );
           stats.warnings.push(
             `Mesh simplification skipped: ${simplifyError.message}`

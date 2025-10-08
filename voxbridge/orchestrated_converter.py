@@ -17,6 +17,7 @@ from .converter import VoxBridgeConverter
 from .gltf_extension_handler import GLTFExtensionHandler
 from .texture_optimizer import validate_uv_maps, fix_uv_coordinates, ensure_texture_embedding, flatten_texture_paths
 from .error_handler import VoxBridgeErrorHandler
+from datetime import datetime
 from .cross_platform import CrossPlatformManager
 
 logger = logging.getLogger(__name__)
@@ -239,7 +240,7 @@ class OrchestratedConverter:
                     )
                     result['consistency_report'] = consistency_report
             
-            # Step 7: Generate final report and embed in package
+            # Step 7: Generate final consolidated report and embed in package
             processing_time = time.time() - start_time
             result['time_sec'] = processing_time
             result['processing_time'] = processing_time
@@ -248,6 +249,9 @@ class OrchestratedConverter:
             # Generate comprehensive error report
             error_report = self.error_handler.generate_error_report(Path(output_dir))
             result['error_report'] = error_report
+            
+            # Save consolidated report
+            self._save_consolidated_report(result, output_dir)
             
             # Embed report in the final package only if it doesn't already exist
             if result['success'] and result.get('output_path'):
@@ -402,7 +406,9 @@ class OrchestratedConverter:
             
             if self.debug:
                 cmd.append('--verbose')
-                logger.info(f"Running Node.js command: {' '.join(cmd)}")
+            
+            # Always log the command being run for debugging
+            logger.info(f"Running Node.js command: {' '.join(cmd)}")
             
             # Run Node.js processing with proper encoding handling
             try:
@@ -1063,6 +1069,50 @@ class OrchestratedConverter:
                 
         except Exception as e:
             logger.warning(f"Cleanup failed: {e}")
+    
+    def _save_consolidated_report(self, result: Dict[str, Any], output_dir: Path):
+        """Save all reports consolidated into a single voxbridge_report.json"""
+        try:
+            # Build consolidated report
+            consolidated_report = {
+                'conversion_summary': {
+                    'success': result.get('success', False),
+                    'timestamp': datetime.now().isoformat(),
+                    'processing_time': result.get('processing_time', 0),
+                    'input_file': str(result.get('input_path', 'Unknown')),
+                    'output_file': str(result.get('output_path', 'Unknown')),
+                    'target_platform': result.get('target', 'Unknown'),
+                    'conversion_path': result.get('conversion_path', 'Unknown'),
+                    'complex_mode': result.get('complex_mode', False),
+                    'fallback_used': result.get('fallback_used', False)
+                },
+                'statistics': {
+                    'initial': result.get('initial_stats', {}),
+                    'final': result.get('final_stats', {}),
+                    'node_stats': result.get('node_stats', {})
+                },
+                'package_info': result.get('package_info', {}),
+                'warnings': result.get('warnings', []),
+                'cross_platform': result.get('consistency_report', {}),
+                'error_details': result.get('error_report', {}),
+                'validation': result.get('post_validation', {}),
+                'optimizations_applied': {
+                    'texture_fixes': result.get('texture_fixes'),
+                    'texture_path_fixes': result.get('texture_path_fixes'),
+                    'uv_fixes': result.get('uv_fixes', 0),
+                    'extension_fallbacks': result.get('extension_fallbacks', [])
+                }
+            }
+            
+            # Save consolidated report
+            report_path = output_dir / 'voxbridge_report.json'
+            with open(report_path, 'w') as f:
+                json.dump(consolidated_report, f, indent=2, default=str)
+            
+            logger.info(f"Consolidated report saved to: {report_path}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save consolidated report: {e}")
     
     def _embed_report_in_package(self, result: Dict[str, Any], output_dir: Path, debug: bool):
         """Embed the report in the final package"""

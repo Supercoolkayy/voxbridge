@@ -287,7 +287,7 @@ class CrossPlatformManager:
         return result
     
     def generate_consistency_report(self, gltf_path: Path, output_dir: Path) -> Dict[str, Any]:
-        """Generate comprehensive consistency report"""
+        """Generate comprehensive consistency report (returns data without saving)"""
         report = {
             'timestamp': self.platform_info,
             'platform_info': self.platform_info,
@@ -296,12 +296,7 @@ class CrossPlatformManager:
             'recommendations': self._generate_consistency_recommendations(gltf_path)
         }
         
-        # Save report
-        report_path = output_dir / 'cross_platform_consistency_report.json'
-        with open(report_path, 'w') as f:
-            json.dump(report, f, indent=2, default=str)
-        
-        logger.info(f"Consistency report saved to: {report_path}")
+        # Don't save separate file - will be consolidated
         return report
     
     def _generate_consistency_recommendations(self, gltf_path: Path) -> List[str]:

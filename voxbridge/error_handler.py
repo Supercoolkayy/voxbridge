@@ -212,7 +212,7 @@ class VoxBridgeErrorHandler:
         return error_entry
     
     def generate_error_report(self, output_path: Path) -> Dict[str, Any]:
-        """Generate comprehensive error report"""
+        """Generate comprehensive error report (returns data without saving)"""
         report = {
             'timestamp': datetime.now().isoformat(),
             'platform_info': self.platform_info,
@@ -228,12 +228,7 @@ class VoxBridgeErrorHandler:
             'recommendations': self._generate_recommendations()
         }
         
-        # Save report to file
-        report_path = output_path / 'voxbridge_error_report.json'
-        with open(report_path, 'w') as f:
-            json.dump(report, f, indent=2, default=str)
-        
-        logger.info(f"Error report saved to: {report_path}")
+        # Don't save separate file - will be consolidated
         return report
     
     def _categorize_errors(self) -> Dict[str, int]:

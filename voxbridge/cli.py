@@ -42,7 +42,7 @@ app = Typer(
 )
 
 # Global console for rich output
-console = Console(emoji=False, width=80)
+console = Console(emoji=False, width=100)
 
 def print_fancy_header(verbose: bool = False):
     """Print a fancy application header with visual effects"""
@@ -51,7 +51,7 @@ def print_fancy_header(verbose: bool = False):
             # Beautiful verbose header
             header_panel = Panel.fit(
                 "[bold bright_blue]VoxBridge Converter v2.0.0 - Next Generation 3D Processing[/bold bright_blue]\n\n"
-                "[cyan]Advanced GLB ➜ GLTF / Roblox / Unity Exporter[/cyan]\n"
+                "[cyan]Advanced GLB -> GLTF / Roblox / Unity Exporter[/cyan]\n"
                 "[dim]Smart Detection • Lightning Fast • Beautiful Output[/dim]\n"
                 "[dim]Auto-Routing • Comprehensive Reports • Optimized Performance[/dim]",
                 title="[bold white]VoxBridge v2.0.0[/bold white]",
@@ -69,7 +69,7 @@ def print_fancy_header(verbose: bool = False):
     else:
         print("VoxBridge Converter v2.0.0 - Next Generation 3D Processing")
         if verbose:
-            print("Advanced GLB ➜ GLTF / Roblox / Unity Exporter")
+            print("Advanced GLB -> GLTF / Roblox / Unity Exporter")
 
 def print_header(verbose: bool = False):
     """Legacy header function for backward compatibility"""
@@ -473,13 +473,18 @@ def convert(
             progress.update(task, description="Conversion completed!")
         
         if result['success']:
-            # Simplified success message
+            # Beautiful success message
+            output_path = result.get('output_path', 'Unknown')
+            processing_time = result.get('processing_time', 0)
+            
             success_panel = Panel.fit(
                 f"[bold green]Success: Your package is ready![/bold green]\n\n"
-                f"Import this file into {target.upper()}: [bold cyan]{result.get('output_path', 'Unknown')}[/bold cyan]\n\n"
-                f"[dim]Processing time: {result.get('processing_time', 0):.2f}s[/dim]",
-                title="Success",
-                border_style="green"
+                f"Import this file into {target.upper()}:\n"
+                f"   [bold cyan]{output_path}[/bold cyan]\n\n"
+                f"[dim]Processing time: {processing_time:.2f}s[/dim]",
+                title="[bold green]Conversion Complete[/bold green]",
+                border_style="green",
+                padding=(1, 2)
             )
             console.print(success_panel)
             
@@ -634,16 +639,32 @@ def batch(
     if result['success']:
         success_count = result.get('success_count', 0)
         total_count = result.get('total_count', 0)
-        console.print(f"\n[bold green]Batch conversion completed: {success_count}/{total_count} files converted successfully")
+        
+        # Beautiful batch success panel
+        batch_panel = Panel.fit(
+            f"[bold green]Batch Conversion Complete![/bold green]\n\n"
+            f"Results: {success_count}/{total_count} files converted successfully\n"
+            f"Output location: [cyan]{output_dir}[/cyan]",
+            title="[bold green]Batch Success[/bold green]",
+            border_style="green",
+            padding=(1, 2)
+        )
+        console.print(batch_panel)
         
         # Show any failed files
         failed_files = result.get('files_failed', [])
         if failed_files:
             console.print(f"\n[yellow]Failed files: {len(failed_files)}[/yellow]")
             for failed in failed_files:
-                console.print(f"  [red]❌ {Path(failed['file']).name}: {failed['error']}[/red]")
+                console.print(f"  [red]X {Path(failed['file']).name}: {failed['error']}[/red]")
     else:
-        console.print(f"\n[bold red]Batch conversion failed: {result.get('error', 'Unknown error')}")
+        error_panel = Panel.fit(
+            f"[bold red]Batch conversion failed![/bold red]\n\n"
+            f"[red]Error:[/red] {result.get('error', 'Unknown error')}",
+            title="Error",
+            border_style="red"
+        )
+        console.print(error_panel)
         raise typer.Exit(1)
 
 @app.command()

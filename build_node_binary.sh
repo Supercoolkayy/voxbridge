@@ -59,6 +59,12 @@ cp -r node_scripts/node_modules build/node_binary/
 
 # Create a bundled Node.js script
 print_status "Creating bundled Node.js script..."
+# Copy the full process_complex.js instead of using a stub
+cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+chmod +x build/node_binary/voxbridge_node.js
+
+# Comment out the old heredoc stub creation
+: <<'EOF_SKIP'
 cat > build/node_binary/voxbridge_node.js << 'EOF'
 #!/usr/bin/env node
 
@@ -483,9 +489,8 @@ if (require.main === module) {
   processComplexGLTF().catch(console.error);
 }
 EOF
-
-# Make the script executable
-chmod +x build/node_binary/voxbridge_node.js
+EOF_SKIP
+# The heredoc stub is now skipped, using actual process_complex.js copied above
 
 # Create a simple test script
 print_status "Creating test script..."
