@@ -39,18 +39,18 @@ jobs:
         run: npm install --production
 
       - name: Build Node.js binary bundle
-        shell: bash
         run: |
-          # Build the bundled Node.js runner
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            bash build_node_binary.sh
-          else
-            bash build_node_binary.sh
-          fi
-
+          # Create build directory
+          mkdir -p build/node_binary
+          
+          # Copy process_complex.js as the main Node.js runner
+          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+          
+          # Make executable
+          chmod +x build/node_binary/voxbridge_node.js
+          
           # Convert line endings for the platform
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # Keep CRLF for Windows
             echo "Using CRLF line endings for Windows"
           else
             # Convert to LF for Linux/Mac
@@ -69,10 +69,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+          
+      - name: Verify build environment
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "Node version: $(node --version)"
+          echo "Python version: $(python --version)"
+          echo "Files in current directory:"
+          ls -la
+          echo "Node scripts directory:"
+          ls -la node_scripts/ || echo "node_scripts not found"
 
       # ----------------- CLI BUILD -----------------
       - name: Build CLI Executable with PyInstaller
-        shell: bash
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -80,7 +89,10 @@ jobs:
           else
             SEP=":"
           fi
-
+          
+          echo "Building CLI executable for ${{ matrix.os }}"
+          echo "Using separator: $SEP"
+          
           pyinstaller --clean -y \
             --distpath dist \
             --workpath build \
@@ -97,10 +109,12 @@ jobs:
             --hidden-import voxbridge.utils.paths \
             --hidden-import voxbridge.utils.detect \
             cli_entry.py
+            
+          echo "CLI build completed"
+          ls -la dist/
 
       # ----------------- GUI BUILD -----------------
       - name: Build GUI Executable with PyInstaller
-        shell: bash
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -108,7 +122,9 @@ jobs:
           else
             SEP=":"
           fi
-
+          
+          echo "Building GUI executable for ${{ matrix.os }}"
+          
           pyinstaller --clean -y \
             --distpath dist \
             --workpath build_gui \
@@ -126,49 +142,68 @@ jobs:
             --hidden-import voxbridge.utils.detect \
             --hidden-import voxbridge.gui.app \
             gui_entry.py
+            
+          echo "GUI build completed"
+          ls -la dist/
 
       # ----------------- PACKAGE -----------------
       - name: Create release package
-        shell: bash
         run: |
           # Create release directory structure
           mkdir -p release/voxbridge
-
+          
+          echo "Copying files to release package..."
+          
           # Copy executables
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/
-
+          
           # Copy node_scripts with dependencies
           cp -r node_scripts release/voxbridge/
           cp -r build/node_binary release/voxbridge/
-
+          
           # Copy documentation
-          cp README.md release/voxbridge/
-          cp LICENSE release/voxbridge/
-          cp -r docs release/voxbridge/ || true
-          cp -r examples release/voxbridge/ || true
-
+          cp README.md release/voxbridge/ 2>/dev/null || echo "README.md not found"
+          cp LICENSE release/voxbridge/ 2>/dev/null || echo "LICENSE not found"
+          cp -r docs release/voxbridge/ 2>/dev/null || echo "docs directory not found"
+          cp -r examples release/voxbridge/ 2>/dev/null || echo "examples directory not found"
+          
+          # List what we have
+          echo "Package contents:"
+          find release/voxbridge -type f | head -20
+          
           # Create archive with platform-specific naming
           cd release
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             tar -czf voxbridge-linux-x64.tar.gz voxbridge/
             mv voxbridge-linux-x64.tar.gz ../
+            echo "Created voxbridge-linux-x64.tar.gz"
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             tar -czf voxbridge-macos-x64.tar.gz voxbridge/
             mv voxbridge-macos-x64.tar.gz ../
+            echo "Created voxbridge-macos-x64.tar.gz"
           else
-            7z a -tzip voxbridge-windows-x64.zip voxbridge/ || zip -r voxbridge-windows-x64.zip voxbridge/
-            mv voxbridge-windows-x64.zip ../
+            # Use built-in zip command
+            powershell Compress-Archive -Path voxbridge -DestinationPath ../voxbridge-windows-x64.zip -Force
+            echo "Created voxbridge-windows-x64.zip"
           fi
+          
+          # Show final files
+          ls -la ../voxbridge-*.* || echo "No archive files created"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voxbridge-${{ matrix.target }}
+          name: voxbridge-${{ matrix.os }}
           path: |
             voxbridge-*.tar.gz
             voxbridge-*.zip
           if-no-files-found: error
+          
+      - name: List final artifacts
+        run: |
+          echo "Final artifacts:"
+          ls -la voxbridge-*.* || echo "No artifacts found"
 
   release:
     needs: build
