@@ -2,6 +2,12 @@
 
 **Performance characteristics and testing results for VoxBridge v1.0.7**
 
+
+## ⚡ Performance & Best Practices
+
+- Simple/static models run fine without Node.js.
+- Complex/animated/large models require Node.js for stable performance.
+
 ## 🎯 Current Status: Production Ready
 
 **VoxBridge v1.0.7 has achieved production-ready status with all critical issues resolved and performance exceeding targets.**

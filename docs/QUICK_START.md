@@ -2,6 +2,7 @@
 
 **Get up and running with VoxBridge in under 5 minutes!**
 
+
 ## 🎯 What You Need
 
 **Before you start, make sure you have:**
@@ -11,6 +12,8 @@
 - Your target platform in mind (Roblox or Unity)
 
 > ⚠️ **Important**: VoxBridge only works with GLB files from The Sandbox VoxEdit. Other formats like OBJ, FBX, or random 3D models won't work.
+> 📌 **You can run the single executable in `/dist` with no install required.**
+> For full performance (complex model handling, large assets, animations), Node.js must be installed. Simple/static models run fine without Node.js.
 
 ## 🖱️ Choose Your Method
 
@@ -127,19 +130,24 @@
 
 > 💡 **Always export from VoxEdit as GLB format for best results.**
 
-## 🎯 Target Platforms
+
+## 🎯 Target Platforms & Export Logic
 
 ### For Roblox
-
 - **Input**: VoxEdit .glb/.gltf files
 - **Output**: Roblox-compatible glTF files
 - **Features**: Simplified materials, Roblox-specific optimizations
+- **Target flag (`--target roblox`)**: Lightweight materials, Roblox-specific optimizations.
 
 ### For Unity
-
 - **Input**: VoxEdit .glb/.gltf files
 - **Output**: Unity-optimized glTF files
 - **Features**: Full PBR materials, mesh optimization
+- **Target flag (`--target unity`)**: Remaps PBR channels for Unity’s shader format, fixes gray textures.
+
+### Static vs. Animated Export Logic
+- **Static Models**: Exported as tri-mesh; original skeleton is deleted. Fast processing, Node.js not required.
+- **Animated/Skinned Models**: Exported with skinning; static duplicates are deleted. Animation/skin preserved, Node.js required for full feature support.
 
 ## 🔧 Common Commands
 

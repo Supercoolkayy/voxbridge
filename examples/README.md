@@ -1,3 +1,39 @@
+## VoxBridge Examples & Usage
+
+### Dependencies
+- Only Node.js (latest LTS) is required for advanced/complex model processing.
+- Users can run the single executable in `/dist` with no install required.
+- For full performance (complex model handling, large assets, animations), Node.js must be installed. Simple/static models run fine without Node.js.
+
+### Animations & Mesh Handling
+- **Static models**: Exported as tri-mesh; original skeleton is deleted. Fast processing, Node.js not required.
+- **Animated/skinned models**: Exported with skinning; static duplicates are deleted. Animation/skin preserved, Node.js required for full feature support.
+
+### What's New (Milestone 3)
+- **Target flag (`-t`) for Unity and Roblox exports**: Fixes gray textures in Unity, lightweight materials for Roblox.
+- **Improved texture/material export**: Remaps PBR channels for Unity’s shader format.
+- **Animation support**: Animated/skinned models exported with skinning, static duplicates deleted.
+- **Executable builds in `/dist`**: No install required for basic use; Node.js needed for advanced/complex cases.
+
+### Usage Examples
+```bash
+# Static model export (Unity)
+./voxbridge convert --input static_model.glb --output static_model.gltf --target unity --force-static
+
+# Animated/skinned model export (Roblox)
+./voxbridge convert --input animated_character.glb --output animated_character.gltf --target roblox --force-node
+
+# Default GLTF export
+./voxbridge convert --input model.glb --output model.gltf
+
+# Target flag usage
+./voxbridge convert --input model.glb --output model.gltf --target unity
+./voxbridge convert --input model.glb --output model.gltf --target roblox
+
+# Batch processing
+./voxbridge batch ./input_folder --output-dir ./output_folder --target roblox
+```
+
 # Examples
 
 This directory contains example input and output files for testing VoxBridge functionality.
@@ -85,7 +121,12 @@ for file_path in input_dir.glob("*.glb"):
             print(f"[ERROR] Failed to convert {file_path.name}")
 ```
 
-## Notes
+## Performance & Best Practices
+
+- Simple/static models run fine without Node.js.
+- Complex/animated/large models require Node.js for stable performance.
+
+---
 
 - The `input/` and `output/` directories are initially empty
 - Add your own test files to `input/` to test VoxBridge functionality

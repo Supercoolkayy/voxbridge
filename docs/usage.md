@@ -23,30 +23,47 @@
 
 > ⚠️ **Important**: Always export your assets from The Sandbox VoxEdit in GLB format for best results.
 
-## 🎮 Target Platforms
+
+## 🎮 Target Platforms & Processing Logic
 
 ### Unity
-
 - **Input**: VoxEdit .glb/.gltf files
 - **Output**: Optimized glTF files for Unity
 - **Features**: Full PBR materials, mesh optimization, texture handling
+- **Target flag (`--target unity`)**: Remaps PBR channels for Unity’s shader format, fixes gray textures.
 
 ### Roblox
-
 - **Input**: VoxEdit .glb/.gltf files
 - **Output**: Roblox-compatible glTF files
 - **Features**: Simplified materials, Roblox-specific optimizations
+- **Target flag (`--target roblox`)**: Lightweight materials, Roblox-specific optimizations.
+
+### Static vs. Animated Export Logic
+- **Static Models**: Exported as tri-mesh; original skeleton is deleted. Fast processing, Node.js not required.
+- **Animated/Skinned Models**: Exported with skinning; static duplicates are deleted. Animation/skin preserved, Node.js required for full feature support.
+
+### Performance Notes
+- Simple/static models run fine without Node.js.
+- Complex/animated/large models require Node.js for stable performance.
 
 ## 🔧 Basic CLI Usage
+
 
 ### Single File Conversion
 
 ```bash
-# Basic conversion for Roblox
-voxbridge convert --input model.glb --output model.gltf --target roblox
+# Static model export (Unity)
+voxbridge convert --input static_model.glb --output static_model.gltf --target unity --force-static
 
-# Basic conversion for Unity
+# Animated/skinned model export (Roblox)
+voxbridge convert --input animated_character.glb --output animated_character.gltf --target roblox --force-node
+
+# Default GLTF export
+voxbridge convert --input model.glb --output model.gltf
+
+# Target flag usage
 voxbridge convert --input model.glb --output model.gltf --target unity
+voxbridge convert --input model.glb --output model.gltf --target roblox
 
 # With optimization (recommended)
 voxbridge convert --input model.glb --output model.gltf --target roblox --optimize-mesh

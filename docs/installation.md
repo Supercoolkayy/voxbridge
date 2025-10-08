@@ -75,10 +75,10 @@ voxbridge-gui.exe
    ./voxbridge-gui
    ```
 
-## 🐍 Python Installation (For Developers)
 
-**Only use this if you need to modify VoxBridge or build from source.**
+## 🐍 Python & Node.js Installation (For Developers)
 
+**Only use Python install if you need to modify VoxBridge or build from source. Node.js is only required for advanced/complex model processing (latest LTS recomme
 ### Method 1: Using pipx (Recommended)
 
 ```bash
@@ -121,7 +121,11 @@ python3 -m build
 pip install dist/*.whl
 ```
 
-## 🛠️ Troubleshooting Installation Issues
+
+## ⚡ Performance & Best Practices
+
+- Simple/static models run fine without Node.js.
+- Complex/animated/large models require Node.js for stable performance.
 
 ### Issue: "voxbridge command not found"
 

@@ -53,12 +53,16 @@ VoxBridge now features an intelligent conversion system that automatically detec
 - Perfect for batch processing and scripting
 - Advanced options and customization
 
-## System Requirements
+## System Requirements & Dependencies
 
 - **OS**: Windows 10+, macOS 10.14+, or Linux (x64)
 - **RAM**: 2GB minimum, 4GB recommended
 - **Storage**: 200MB free space
 - **Graphics**: Basic graphics support for GUI
+- **Node.js**: Only required for advanced/complex model processing (latest LTS recommended)
+
+> 📌 **You can run the single executable in `/dist` with no install required.**
+> For full performance (complex model handling, large assets, animations), Node.js must be installed. Simple/static models run fine without Node.js.
 
 > 📖 **Need detailed installation help?** See [Installation Guide](docs/installation.md) for step-by-step instructions and troubleshooting.
 
@@ -202,6 +206,77 @@ VoxBridge now features an intelligent conversion system that automatically detec
 - ✅ Always export from The Sandbox VoxEdit as GLB
 - ✅ Use the GUI for your first conversion (no terminal needed!)
 - ✅ Check the output ZIP file for your converted model
+
+## 🧠 Animations & Mesh Handling
+
+VoxBridge automatically detects model complexity and chooses the optimal processing path:
+
+**Static Models:**
+
+- Exported as tri-mesh; original skeleton is deleted.
+- Fast processing, no Node.js required.
+
+**Animated / Skinned Models:**
+
+- Exported with skinning; static duplicates are deleted.
+- Animation and skinning preserved; Node.js required for full feature support.
+
+**Manual Override:**
+
+- `--force-static`: Force static processing (faster, but may lose complex features)
+- `--force-node`: Force complex processing (slower, but preserves all features)
+
+### CLI Usage Examples
+
+```bash
+# Static model export (no animation)
+./voxbridge convert --input static_model.glb --output static_model.gltf --target unity --force-static
+
+# Animated/skinned model export
+./voxbridge convert --input animated_character.glb --output animated_character.gltf --target roblox --force-node
+```
+
+## 🆕 What’s New (Milestone 3)
+
+- **Target flag (`-t`) for Unity and Roblox exports**: Fixes gray textures in Unity, lightweight materials for Roblox.
+- **Improved texture/material export**: Remaps PBR channels for Unity’s shader format.
+- **Animation support**: Animated/skinned models are exported with skinning, static duplicates are deleted.
+- **Executable builds in `/dist`**: No install required for basic use; Node.js needed for advanced/complex cases.
+
+## 🔧 Usage Examples
+
+```bash
+# Static model export (Unity)
+./voxbridge convert --input static_model.glb --output static_model.gltf --target unity --force-static
+
+# Animated/skinned model export (Roblox)
+./voxbridge convert --input animated_character.glb --output animated_character.gltf --target roblox --force-node
+
+# Default GLTF export
+./voxbridge convert --input model.glb --output model.gltf
+
+# Target flag usage
+./voxbridge convert --input model.glb --output model.gltf --target unity
+./voxbridge convert --input model.glb --output model.gltf --target roblox
+
+# Batch processing
+./voxbridge batch ./input_folder --output-dir ./output_folder --target roblox
+```
+
+### Requirements
+
+- **Python**: 3.12 (not 3.13) - required for compatibility
+- **Dependencies**: Install from requirements.txt
+- **Node.js**: Only required for advanced/complex model processing (latest LTS recommended)
+
+---
+
+## ⚡ Performance & Best Practices
+
+- Simple/static models run fine without Node.js.
+- Complex/animated/large models require Node.js for stable performance.
+
+---
 
 ## 🔗 Learn More
 
