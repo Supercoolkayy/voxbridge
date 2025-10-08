@@ -1,9 +1,10 @@
-name: Publish VoxBridge
+name: Build and Release VoxBridge
 
 on:
   push:
     tags:
-      - "v*.."
+      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -33,28 +34,28 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Node deps
-        run: npm install
+      - name: Install Node dependencies
+        working-directory: node_scripts
+        run: npm install --production
 
-      - name: Build Node runner (wrapper approach)
+      - name: Build Node.js binary bundle
+        shell: bash
         run: |
-          # Create Node.js wrapper instead of using pkg (avoids download issues)
-          cat > node_runner${{ matrix.ext }} << 'EOF'
-          #!/bin/bash
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          NODE_SCRIPTS_DIR="$SCRIPT_DIR/node_scripts"
-          if [ ! -d "$NODE_SCRIPTS_DIR" ]; then
-            echo "❌ Node.js scripts directory not found: $NODE_SCRIPTS_DIR"
-            exit 1
+          # Build the bundled Node.js runner
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            bash build_node_binary.sh
+          else
+            bash build_node_binary.sh
           fi
-          if ! command -v node &> /dev/null; then
-            echo "❌ Node.js not found. Please install Node.js 18+"
-            exit 1
+
+          # Convert line endings for the platform
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            # Keep CRLF for Windows
+            echo "Using CRLF line endings for Windows"
+          else
+            # Convert to LF for Linux/Mac
+            sed -i 's/\r$//' build/node_binary/voxbridge_node.js
           fi
-          cd "$NODE_SCRIPTS_DIR"
-          node index.js "$@"
-          EOF
-          chmod +x node_runner${{ matrix.ext }}
 
       # -----------------------
       # Python setup
@@ -63,75 +64,156 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            pip install -r requirements-freeze.txt
-          else
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
           pip install pyinstaller
 
       # ----------------- CLI BUILD -----------------
-      - name: Build CLI Executable
+      - name: Build CLI Executable with PyInstaller
+        shell: bash
         run: |
+          # Determine separator for add-data based on OS
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            SEP=";"
+          else
+            SEP=":"
+          fi
+
           pyinstaller --clean -y \
-            --distpath dist_${{ matrix.os }} \
-            --workpath build_${{ matrix.os }} \
+            --distpath dist \
+            --workpath build \
             --onefile \
             --console \
-            --name voxbridge \
-            --add-data "voxbridge;voxbridge" \
-            --add-data "node_scripts;node_scripts" \
-            --add-binary "node_runner${{ matrix.ext }}:." \
+            --name voxbridge${{ matrix.ext }} \
+            --add-data "voxbridge${SEP}voxbridge" \
+            --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge.orchestrated_converter \
+            --hidden-import voxbridge.pipeline_runner \
+            --hidden-import voxbridge.cross_platform \
+            --hidden-import voxbridge.error_handler \
             --hidden-import voxbridge.utils.paths \
+            --hidden-import voxbridge.utils.detect \
             cli_entry.py
 
       # ----------------- GUI BUILD -----------------
-      - name: Build GUI Executable
+      - name: Build GUI Executable with PyInstaller
+        shell: bash
         run: |
+          # Determine separator for add-data based on OS
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            SEP=";"
+          else
+            SEP=":"
+          fi
+
           pyinstaller --clean -y \
-            --distpath dist_${{ matrix.os }} \
-            --workpath build_${{ matrix.os }} \
+            --distpath dist \
+            --workpath build_gui \
             --onefile \
             --windowed \
-            --name voxbridge-gui \
-            --add-data "voxbridge;voxbridge" \
-            --add-data "node_scripts;node_scripts" \
-            --add-binary "node_runner${{ matrix.ext }}:." \
+            --name voxbridge-gui${{ matrix.ext }} \
+            --add-data "voxbridge${SEP}voxbridge" \
+            --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge.orchestrated_converter \
+            --hidden-import voxbridge.pipeline_runner \
+            --hidden-import voxbridge.cross_platform \
+            --hidden-import voxbridge.error_handler \
             --hidden-import voxbridge.utils.paths \
+            --hidden-import voxbridge.utils.detect \
+            --hidden-import voxbridge.gui.app \
             gui_entry.py
 
       # ----------------- PACKAGE -----------------
-      - name: Package artifacts
+      - name: Create release package
+        shell: bash
         run: |
-          cd dist_${{ matrix.os }}
-          zip -r ../voxbridge-${{ matrix.os }}.zip .
+          # Create release directory structure
+          mkdir -p release/voxbridge
+
+          # Copy executables
+          cp dist/voxbridge${{ matrix.ext }} release/voxbridge/
+          cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/
+
+          # Copy node_scripts with dependencies
+          cp -r node_scripts release/voxbridge/
+          cp -r build/node_binary release/voxbridge/
+
+          # Copy documentation
+          cp README.md release/voxbridge/
+          cp LICENSE release/voxbridge/
+          cp -r docs release/voxbridge/ || true
+          cp -r examples release/voxbridge/ || true
+
+          # Create archive with platform-specific naming
+          cd release
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            tar -czf voxbridge-linux-x64.tar.gz voxbridge/
+            mv voxbridge-linux-x64.tar.gz ../
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            tar -czf voxbridge-macos-x64.tar.gz voxbridge/
+            mv voxbridge-macos-x64.tar.gz ../
+          else
+            7z a -tzip voxbridge-windows-x64.zip voxbridge/ || zip -r voxbridge-windows-x64.zip voxbridge/
+            mv voxbridge-windows-x64.zip ../
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voxbridge-${{ matrix.os }}
-          path: voxbridge-${{ matrix.os }}.zip
+          name: voxbridge-${{ matrix.target }}
+          path: |
+            voxbridge-*.tar.gz
+            voxbridge-*.zip
+          if-no-files-found: error
 
   release:
     needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./release
+          path: ./artifacts
 
       - name: List downloaded files
-        run: ls -R ./release
+        run: ls -R ./artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find ./artifacts -name "*.tar.gz" -exec cp {} release/ \;
+          find ./artifacts -name "*.zip" -exec cp {} release/ \;
+          ls -lh release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./release//*.zip
+          files: release/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## VoxBridge Release
+
+            Complete standalone executables for Linux, macOS, and Windows.
+            Includes bundled Node.js processing - no additional dependencies required!
+
+            ### Downloads:
+            - **Linux**: `voxbridge-linux-x64.tar.gz`
+            - **macOS**: `voxbridge-macos-x64.tar.gz`  
+            - **Windows**: `voxbridge-windows-x64.zip`
+
+            ### Features:
+            - Single executable with all dependencies
+            - Node.js processing bundled
+            - CLI and GUI versions included
+            - Full texture support
+            - Animation preservation
+            - Cross-platform compatible
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
