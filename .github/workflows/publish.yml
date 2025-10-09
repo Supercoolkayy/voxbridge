@@ -36,7 +36,12 @@ jobs:
 
       - name: Install Node dependencies
         working-directory: node_scripts
-        run: npm install --production
+        run: |
+          # Prevent interactive prompts on Windows
+          npm config set fund false
+          npm config set audit false
+          npm install --production --no-optional --no-audit --no-fund
+        timeout-minutes: 15
 
       - name: Build Node.js binary bundle
         run: |
@@ -46,15 +51,21 @@ jobs:
           # Copy process_complex.js as the main Node.js runner
           cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
           
-          # Make executable
-          chmod +x build/node_binary/voxbridge_node.js
+          # Make executable (skip on Windows)
+          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
+            chmod +x build/node_binary/voxbridge_node.js
+          fi
           
           # Convert line endings for the platform
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             echo "Using CRLF line endings for Windows"
           else
-            # Convert to LF for Linux/Mac
-            sed -i 's/\r$//' build/node_binary/voxbridge_node.js
+            # Convert to LF for Linux/Mac - use proper sed syntax
+            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js
+            else
+              sed -i 's/\r$//' build/node_binary/voxbridge_node.js
+            fi
           fi
 
       # -----------------------
@@ -69,6 +80,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+        timeout-minutes: 10
           
       - name: Verify build environment
         run: |
