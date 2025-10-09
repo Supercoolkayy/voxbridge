@@ -25,11 +25,12 @@ class OrchestratedConverter:
         self.static_converter = VoxBridgeConverter(debug=debug)
         self.conversion_stats = {}
         
-        # Check if Node.js is available
-        self.node_available = self._check_node_availability()
-        
-        if not self.node_available:
-            logger.warning("Node.js not available - complex files will use fallback processing")
+        # Always use bundled node runner, do not require global Node.js
+        self.node_runner_path = get_resource_path("build/node_binary/voxbridge_node.js")
+        if not self.node_runner_path.exists():
+            logger.warning("ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner not found!")
+        else:
+            logger.info("ℹ️ Using built-in Node.js processing (no system Node required).")
     
     def convert_file(self, input_path: Path, output_dir: Path, target: str, 
                     options: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -90,11 +91,11 @@ class OrchestratedConverter:
             
             # Step 3: Route to appropriate converter
             if use_complex_path:
-                if self.node_available:
-                    logger.info("Using Node.js complex processing path")
+                if self.node_runner_path.exists():
+                    logger.info("Using built-in Node.js complex processing path")
                     result = self._process_complex_file(input_path_obj, Path(output_dir), target, options, result, input_path_obj)
                 else:
-                    logger.warning("Node.js not available, falling back to static processing")
+                    logger.warning("ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner not found, falling back to static processing.")
                     result['fallback_used'] = True
                     result = self._process_static_file(input_path_obj, Path(output_dir), target, options, result, input_path_obj)
             else:
@@ -258,14 +259,13 @@ class OrchestratedConverter:
             result['initial_stats'] = initial_stats
             
             # Prepare Node.js command using bundled runner
-            node_runner_path = get_node_runner_path()
-            
+            node_runner_path = self.node_runner_path
             if not node_runner_path.exists():
                 raise FileNotFoundError(f"Node.js runner not found: {node_runner_path}")
-            
+
             # Build command arguments
             cmd = [
-                str(node_runner_path), 'process',
+                "node", str(node_runner_path), 'process',
                 '--input', str(input_path.absolute()),
                 '--output', str(output_dir.absolute()),
                 '--target', target
@@ -1112,31 +1112,7 @@ class OrchestratedConverter:
         
         return improvements
     
-    def _check_node_availability(self) -> bool:
-        """Check if Node.js is available (either system node or bundled node_runner)"""
-        try:
-            # First try bundled node_runner
-            node_runner_path = get_node_runner_path()
-            if node_runner_path.exists():
-                # Ensure it's executable
-                if ensure_executable(node_runner_path):
-                    # Test if it works
-                    result = subprocess.run([str(node_runner_path), '--version'], 
-                                          capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0:
-                        logger.info(f"Using bundled Node.js runner: {node_runner_path}")
-                        return True
-            
-            # Fallback to system node
-            result = subprocess.run(['node', '--version'], capture_output=True, text=True)
-            if result.returncode == 0:
-                logger.info("Using system Node.js")
-                return True
-                
-            return False
-        except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
-            logger.warning(f"Node.js not available: {e}")
-            return False
+    # Removed _check_node_availability and global Node.js checks
     
     def get_conversion_stats(self) -> Dict[str, Any]:
         """Get the last conversion statistics"""

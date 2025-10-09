@@ -40,30 +40,8 @@ def check_dependencies():
         return False
     print(f"✅ Python {python_version.major}.{python_version.minor}.{python_version.micro}")
     
-    # Check Node.js
-    try:
-        result = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            print(f"✅ Node.js {result.stdout.strip()}")
-        else:
-            print("❌ Node.js not found")
-            return False
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        print("❌ Node.js not found")
-        return False
-    
-    # Check npm
-    try:
-        result = subprocess.run(["npm", "--version"], capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            print(f"✅ npm {result.stdout.strip()}")
-        else:
-            print("❌ npm not found")
-            return False
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        print("❌ npm not found")
-        return False
-    
+    # Node.js and npm global checks removed
+    print("ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner will be used.")
     return True
 
 def run_windows_build():

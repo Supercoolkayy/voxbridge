@@ -29,30 +29,9 @@ def get_resource_path(relative_path: Union[str, Path]) -> Path:
 
 def get_node_runner_path() -> Path:
     """
-    Get the path to the node_runner binary
-    
-    Returns:
-        Path to the node_runner executable
+    Return the path to the bundled node runner (voxbridge_node.js)
     """
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        bundle_dir = Path(sys._MEIPASS)
-        # Check for different OS extensions
-        for ext in ['', '.exe']:
-            node_runner = bundle_dir / f"node_runner{ext}"
-            if node_runner.exists():
-                return node_runner
-        # Fallback
-        return bundle_dir / "node_runner"
-    else:
-        # Running as script - look for node_runner in project root
-        project_root = Path(__file__).parent.parent.parent
-        for ext in ['', '.exe']:
-            node_runner = project_root / f"node_runner{ext}"
-            if node_runner.exists():
-                return node_runner
-        # Fallback to node_scripts/index.js
-        return project_root / "node_scripts" / "index.js"
+    return get_resource_path("build/node_binary/voxbridge_node.js")
 
 def get_voxbridge_module_path() -> Path:
     """
