@@ -9,10 +9,10 @@ Your VoxBridge project now has automated CI/CD that builds executables for all p
 ### Method 1: Create a Version Tag (Recommended)
 ```bash
 # Tag your current version
-git tag v1.0.0
+git tag v2.0.0
 
 # Push the tag to GitHub
-git push origin v1.0.0
+git push origin v2.0.0
 ```
 
 This will automatically:

@@ -2,10 +2,6 @@
 
 **Get up and running with VoxBridge in under 5 minutes!**
 
-<<<<<<< HEAD
-
-=======
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 ## 🎯 What You Need
 
 **Before you start, make sure you have:**
@@ -15,11 +11,8 @@
 - Your target platform in mind (Roblox or Unity)
 
 > ⚠️ **Important**: VoxBridge only works with GLB files from The Sandbox VoxEdit. Other formats like OBJ, FBX, or random 3D models won't work.
-<<<<<<< HEAD
 > 📌 **You can run the single executable in `/dist` with no install required.**
 > For full performance (complex model handling, large assets, animations), Node.js must be installed. Simple/static models run fine without Node.js.
-=======
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 ## 🖱️ Choose Your Method
 

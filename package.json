@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {
   "name": "voxbridge",
   "version": "2.0.0",
@@ -42,48 +41,3 @@
   "author": "VoxBridge Team",
   "license": "MIT"
 }
-=======
-{
-  "name": "voxbridge",
-  "version": "2.0.0",
-  "description": "VoxEdit to Unity/Roblox GLTF Converter",
-  "main": "node_scripts/index.js",
-  "scripts": {
-    "build": "npx pkg node_scripts/index.js --targets node18-linux-x64,node18-macos-x64,node18-win-x64 --output node_runner",
-    "test": "node node_scripts/index.js --version"
-  },
-  "dependencies": {
-    "@gltf-transform/cli": "^3.4.0",
-    "@gltf-transform/core": "^3.4.0",
-    "@gltf-transform/functions": "^3.4.0",
-    "gltf-pipeline": "^4.0.0",
-    "commander": "^11.1.0",
-    "fs-extra": "^11.1.1",
-    "adm-zip": "^0.5.10"
-  },
-  "devDependencies": {
-    "pkg": "^5.8.1"
-  },
-  "pkg": {
-    "assets": [
-      "node_scripts/**/*"
-    ],
-    "targets": [
-      "node18-linux-x64",
-      "node18-macos-x64", 
-      "node18-win-x64"
-    ]
-  },
-  "keywords": [
-    "gltf",
-    "glb",
-    "unity",
-    "roblox",
-    "voxedit",
-    "3d",
-    "converter"
-  ],
-  "author": "VoxBridge Team",
-  "license": "MIT"
-}
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
