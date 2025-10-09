@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 ## VoxBridge Examples & Usage
 
 ### Dependencies
@@ -124,16 +124,14 @@ for file_path in input_dir.glob("*.glb"):
             print(f"[ERROR] Failed to convert {file_path.name}")
 ```
 
-<<<<<<< HEAD
 ## Performance & Best Practices
 
 - Simple/static models run fine without Node.js.
 - Complex/animated/large models require Node.js for stable performance.
 
----
 =======
+
 ## Notes
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 - The `input/` and `output/` directories are initially empty
 - Add your own test files to `input/` to test VoxBridge functionality

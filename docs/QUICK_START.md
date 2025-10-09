@@ -136,7 +136,6 @@
 
 > 💡 **Always export from VoxEdit as GLB format for best results.**
 
-<<<<<<< HEAD
 
 ## 🎯 Target Platforms & Export Logic
 
@@ -155,21 +154,9 @@
 ### Static vs. Animated Export Logic
 - **Static Models**: Exported as tri-mesh; original skeleton is deleted. Fast processing, Node.js not required.
 - **Animated/Skinned Models**: Exported with skinning; static duplicates are deleted. Animation/skin preserved, Node.js required for full feature support.
-=======
-## 🎯 Target Platforms
 
-### For Roblox
+======
 
-- **Input**: VoxEdit .glb/.gltf files
-- **Output**: Roblox-compatible glTF files
-- **Features**: Simplified materials, Roblox-specific optimizations
-
-### For Unity
-
-- **Input**: VoxEdit .glb/.gltf files
-- **Output**: Unity-optimized glTF files
-- **Features**: Full PBR materials, mesh optimization
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 ## 🔧 Common Commands
 

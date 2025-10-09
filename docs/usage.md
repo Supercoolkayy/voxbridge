@@ -23,7 +23,6 @@
 
 > ⚠️ **Important**: Always export your assets from The Sandbox VoxEdit in GLB format for best results.
 
-<<<<<<< HEAD
 
 ## 🎮 Target Platforms & Processing Logic
 
