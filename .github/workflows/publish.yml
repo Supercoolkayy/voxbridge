@@ -36,6 +36,7 @@ jobs:
 
       - name: Install Node dependencies
         working-directory: node_scripts
+        shell: bash
         run: |
           # Prevent interactive prompts on Windows
           npm config set fund false
@@ -44,6 +45,7 @@ jobs:
         timeout-minutes: 15
 
       - name: Build Node.js binary bundle
+        shell: bash
         run: |
           # Create build directory
           mkdir -p build/node_binary
@@ -76,6 +78,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -83,6 +86,7 @@ jobs:
         timeout-minutes: 10
           
       - name: Verify build environment
+        shell: bash
         run: |
           echo "OS: ${{ matrix.os }}"
           echo "Node version: $(node --version)"
@@ -94,6 +98,7 @@ jobs:
 
       # ----------------- CLI BUILD -----------------
       - name: Build CLI Executable with PyInstaller
+        shell: bash
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -127,6 +132,7 @@ jobs:
 
       # ----------------- GUI BUILD -----------------
       - name: Build GUI Executable with PyInstaller
+        shell: bash
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -160,6 +166,7 @@ jobs:
 
       # ----------------- PACKAGE -----------------
       - name: Create release package
+        shell: bash
         run: |
           # Create release directory structure
           mkdir -p release/voxbridge
@@ -213,6 +220,7 @@ jobs:
           if-no-files-found: error
           
       - name: List final artifacts
+        shell: bash
         run: |
           echo "Final artifacts:"
           ls -la voxbridge-*.* || echo "No artifacts found"
