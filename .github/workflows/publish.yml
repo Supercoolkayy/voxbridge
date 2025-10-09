@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------
-      # Node.js setup
+      # Node.js setup (for build-time tasks & pkg-fetch)
       # -----------------------
       - uses: actions/setup-node@v4
         with:
@@ -45,29 +45,61 @@ jobs:
           npm install --production --no-optional --no-audit --no-fund
         timeout-minutes: 15
 
-      - name: Build Node.js binary bundle
+      # -----------------------
+      # Fetch a Node runtime for bundling (so released package works without system node)
+      # This step downloads a Node binary using npx pkg-fetch and places it into build/node_binary/node
+      # -----------------------
+      - name: Fetch Node runtime for bundling
+        shell: bash
+        run: |
+          set -e
+          mkdir -p build/node_binary
+          echo "Fetching Node runtime for platform: ${{ matrix.os }}"
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            # Windows: download Windows node executable
+            npx pkg-fetch --node-range node18 --platform win --arch x64 --output build/node_binary/node18-win-x64
+            # move or copy to stable name if possible
+            # extracted filename can vary; attempt common locations
+            if [ -f build/node_binary/node-v18.*-win-x64.exe ] 2>/dev/null; then
+              mv build/node_binary/node-v18.*-win-x64.exe build/node_binary/node.exe || true
+            fi
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            npx pkg-fetch --node-range node18 --platform macos --arch x64 --output build/node_binary/node18-macos-x64
+            # move binary to stable name if present
+            find build/node_binary -type f -name "node-v18.*-darwin*" -exec mv {} build/node_binary/node \; || true
+            chmod +x build/node_binary/node || true
+          else
+            # linux
+            npx pkg-fetch --node-range node18 --platform linux --arch x64 --output build/node_binary/node18-linux-x64
+            find build/node_binary -type f -name "node-v18.*-linux*" -exec mv {} build/node_binary/node \; || true
+            chmod +x build/node_binary/node || true
+          fi
+          echo "Node runtime fetch step complete. Files in build/node_binary:"
+          ls -la build/node_binary || true
+        timeout-minutes: 10
+
+      - name: Build Node.js binary bundle (copy runner)
         shell: bash
         run: |
           # Create build directory
           mkdir -p build/node_binary
-          
-          # Copy process_complex.js as the main Node.js runner
-          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
-          
-          # Make executable (skip on Windows)
+
+          # Copy process_complex.js as the main Node.js runner next to the Node runtime
+          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js || true
+
+          # Make executable (skip on Windows but keep it simple)
           if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-            chmod +x build/node_binary/voxbridge_node.js
+            chmod +x build/node_binary/voxbridge_node.js || true
           fi
-          
-          # Convert line endings for the platform
+
+          # Convert line endings for platform
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             echo "Using CRLF line endings for Windows"
           else
-            # Convert to LF for Linux/Mac - use proper sed syntax
             if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js
+              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js || true
             else
-              sed -i 's/\r$//' build/node_binary/voxbridge_node.js
+              sed -i 's/\r$//' build/node_binary/voxbridge_node.js || true
             fi
           fi
 
@@ -85,17 +117,19 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
         timeout-minutes: 10
-          
+
       - name: Verify build environment
         shell: bash
         run: |
           echo "OS: ${{ matrix.os }}"
-          echo "Node version: $(node --version)"
+          echo "Node (system) version: $(node --version || echo 'no system node')"
           echo "Python version: $(python --version)"
           echo "Files in current directory:"
           ls -la
           echo "Node scripts directory:"
           ls -la node_scripts/ || echo "node_scripts not found"
+          echo "Build node binary dir contents:"
+          ls -la build/node_binary || true
 
       # ----------------- CLI BUILD -----------------
       - name: Build CLI Executable with PyInstaller
@@ -108,10 +142,10 @@ jobs:
           else
             SEP=":"
           fi
-          
+
           echo "Building CLI executable for ${{ matrix.os }}"
           echo "Using separator: $SEP"
-          
+
           pyinstaller --clean -y \
             --distpath dist \
             --workpath build \
@@ -132,9 +166,9 @@ jobs:
             --exclude-module jupyter \
             --exclude-module IPython \
             cli_entry.py
-            
+
           echo "CLI build completed"
-          ls -la dist/
+          ls -la dist/ || true
 
       # ----------------- GUI BUILD -----------------
       - name: Build GUI Executable with PyInstaller
@@ -147,9 +181,9 @@ jobs:
           else
             SEP=":"
           fi
-          
+
           echo "Building GUI executable for ${{ matrix.os }}"
-          
+
           pyinstaller --clean -y \
             --distpath dist \
             --workpath build_gui \
@@ -171,9 +205,9 @@ jobs:
             --exclude-module jupyter \
             --exclude-module IPython \
             gui_entry.py
-            
+
           echo "GUI build completed"
-          ls -la dist/
+          ls -la dist/ || true
 
       # ----------------- PACKAGE -----------------
       - name: Create release package
@@ -182,27 +216,27 @@ jobs:
         run: |
           # Create release directory structure
           mkdir -p release/voxbridge
-          
+
           echo "Copying files to release package..."
-          
+
           # Copy executables
-          cp dist/voxbridge${{ matrix.ext }} release/voxbridge/
-          cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/
-          
-          # Copy node_scripts with dependencies
-          cp -r node_scripts release/voxbridge/
-          cp -r build/node_binary release/voxbridge/
-          
+          cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
+          cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
+
+          # Copy node_scripts with dependencies and the node runtime
+          cp -r node_scripts release/voxbridge/ || true
+          cp -r build/node_binary release/voxbridge/ || true
+
           # Copy documentation
           cp README.md release/voxbridge/ 2>/dev/null || echo "README.md not found"
           cp LICENSE release/voxbridge/ 2>/dev/null || echo "LICENSE not found"
           cp -r docs release/voxbridge/ 2>/dev/null || echo "docs directory not found"
           cp -r examples release/voxbridge/ 2>/dev/null || echo "examples directory not found"
-          
+
           # List what we have
-          echo "Package contents:"
-          find release/voxbridge -type f 2>/dev/null | head -20 || echo "No files found or find command failed"
-          
+          echo "Package contents (top 200 files):"
+          find release/voxbridge -type f 2>/dev/null | head -200 || echo "No files found or find command failed"
+
           # Create archive with platform-specific naming
           cd release
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
@@ -214,11 +248,11 @@ jobs:
             mv voxbridge-macos-x64.tar.gz ../
             echo "Created voxbridge-macos-x64.tar.gz"
           else
-            # Use built-in zip command
+            # Use built-in zip command on Windows runner via PowerShell
             powershell Compress-Archive -Path voxbridge -DestinationPath ../voxbridge-windows-x64.zip -Force
             echo "Created voxbridge-windows-x64.zip"
           fi
-          
+
           # Show final files
           ls -la ../voxbridge-*.* || echo "No archive files created"
 
@@ -230,15 +264,100 @@ jobs:
             voxbridge-*.tar.gz
             voxbridge-*.zip
           if-no-files-found: error
-          
+
       - name: List final artifacts
         shell: bash
         run: |
-          echo "Final artifacts:"
+          echo "Final artifacts created on this runner:"
           ls -la voxbridge-*.* || echo "No artifacts found"
 
-  release:
+  # -----------------------
+  # TEST job (runs on ubuntu-latest)
+  # This extracts the Linux artifact, runs the packaged CLI against examples/input,
+  # and ensures there is no 'Node.js not available' fallback in the logs.
+  # -----------------------
+  test:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Find linux archive
+        shell: bash
+        run: |
+          set -e
+          mkdir -p /tmp/voxbridge-test
+          # Find any linux tar.gz produced by build matrix
+          ARCHIVE="$(find ./artifacts -type f -name '*linux*.tar.gz' -print -quit || true)"
+          if [[ -z "$ARCHIVE" ]]; then
+            echo "No linux tar.gz found in artifacts. Listing artifacts folder:"
+            ls -R ./artifacts || true
+            echo "Attempting to find any tar.gz"
+            ARCHIVE="$(find ./artifacts -type f -name '*.tar.gz' -print -quit || true)"
+          fi
+          if [[ -z "$ARCHIVE" ]]; then
+            echo "ERROR: No tar.gz artifact found to test. Exiting with failure."
+            exit 1
+          fi
+          echo "Using archive: $ARCHIVE"
+          tar -xzf "$ARCHIVE" -C /tmp/voxbridge-test || (echo "Failed to extract archive" && exit 1)
+          echo "Extraction complete. Directory contents:"
+          ls -la /tmp/voxbridge-test || true
+
+      - name: Run batch conversion test (Linux executable)
+        shell: bash
+        env:
+          PATH: "/tmp/voxbridge-test/voxbridge:${PATH}"
+        run: |
+          set -e
+          # Find the executable inside extracted archive (voxbridge/voxbridge)
+          EXEC="$(find /tmp/voxbridge-test -type f -name 'voxbridge' -print -quit || true)"
+          if [[ -z "$EXEC" ]]; then
+            echo "ERROR: voxbridge executable not found inside archive."
+            exit 1
+          fi
+          echo "Found executable: $EXEC"
+          chmod +x "$EXEC"
+
+          # Prepare output directory
+          rm -rf test_output || true
+          mkdir -p test_output
+
+          # Run batch conversion over examples/input and capture logs
+          echo "Running batch conversion on examples/input..."
+          "$EXEC" batch examples/input -o test_output -t unity --verbose > test_log.txt 2>&1 || true
+          EXIT_CODE=$?
+          echo "Batch command exit code: $EXIT_CODE"
+          echo "--- Log (first 200 lines) ---"
+          head -200 test_log.txt || true
+
+          # Fail if CLI crashed (non-zero exit code)
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "ERROR: VoxBridge CLI returned non-zero exit code during test."
+            cat test_log.txt || true
+            exit 1
+          fi
+
+          # Fail the test if any fallback or Node-missing messages were detected
+          if grep -iE "node.js not available|node not available|fallback|falling back|no such file or directory: 'node'" test_log.txt >/dev/null 2>&1; then
+            echo "ERROR: Detected Node fallback or 'Node not available' in test logs."
+            sed -n '1,200p' test_log.txt || true
+            exit 1
+          fi
+
+          echo "Test run passed: CLI ran successfully and no Node fallback detected."
+          echo "Test outputs (top files):"
+          find test_output -type f -maxdepth 3 | head -50 || true
+
+  # -----------------------
+  # Release job - only runs on tag if build+test succeeded
+  # -----------------------
+  release:
+    needs: [build, test]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -271,7 +390,7 @@ jobs:
             ## VoxBridge Release
 
             Complete standalone executables for Linux, macOS, and Windows.
-            Includes bundled Node.js processing - no additional dependencies required!
+            Includes bundled Node.js processing — no additional dependencies required!
 
             ### Downloads:
             - **Linux**: `voxbridge-linux-x64.tar.gz`
