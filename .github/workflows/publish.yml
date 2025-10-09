@@ -1,9 +1,18 @@
+<<<<<<< HEAD
 name: Publish VoxBridge
+=======
+name: Build and Release VoxBridge
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 on:
   push:
     tags:
+<<<<<<< HEAD
       - "v*.."
+=======
+      - "v*.*.*"
+  workflow_dispatch:
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 jobs:
   build:
@@ -33,12 +42,37 @@ jobs:
         with:
           node-version: 18
 
+<<<<<<< HEAD
       - name: Install Node deps
         run: npm install
 
       - name: Build Node runner with pkg
         run: |
           npx pkg node_scripts/index.js --targets ${{ matrix.target }} --output node_runner${{ matrix.ext }}
+=======
+      - name: Install Node dependencies
+        working-directory: node_scripts
+        run: npm install --production
+
+      - name: Build Node.js binary bundle
+        run: |
+          # Create build directory
+          mkdir -p build/node_binary
+          
+          # Copy process_complex.js as the main Node.js runner
+          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+          
+          # Make executable
+          chmod +x build/node_binary/voxbridge_node.js
+          
+          # Convert line endings for the platform
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "Using CRLF line endings for Windows"
+          else
+            # Convert to LF for Linux/Mac
+            sed -i 's/\r$//' build/node_binary/voxbridge_node.js
+          fi
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
       # -----------------------
       # Python setup
@@ -47,6 +81,7 @@ jobs:
         with:
           python-version: "3.11"
 
+<<<<<<< HEAD
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -88,25 +123,211 @@ jobs:
         run: |
           cd dist_${{ matrix.os }}
           zip -r ../voxbridge-${{ matrix.os }}.zip .
+=======
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          
+      - name: Verify build environment
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "Node version: $(node --version)"
+          echo "Python version: $(python --version)"
+          echo "Files in current directory:"
+          ls -la
+          echo "Node scripts directory:"
+          ls -la node_scripts/ || echo "node_scripts not found"
+
+      # ----------------- CLI BUILD -----------------
+      - name: Build CLI Executable with PyInstaller
+        run: |
+          # Determine separator for add-data based on OS
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            SEP=";"
+          else
+            SEP=":"
+          fi
+          
+          echo "Building CLI executable for ${{ matrix.os }}"
+          echo "Using separator: $SEP"
+          
+          pyinstaller --clean -y \
+            --distpath dist \
+            --workpath build \
+            --onefile \
+            --console \
+            --name voxbridge${{ matrix.ext }} \
+            --add-data "voxbridge${SEP}voxbridge" \
+            --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
+            --hidden-import voxbridge.orchestrated_converter \
+            --hidden-import voxbridge.pipeline_runner \
+            --hidden-import voxbridge.cross_platform \
+            --hidden-import voxbridge.error_handler \
+            --hidden-import voxbridge.utils.paths \
+            --hidden-import voxbridge.utils.detect \
+            cli_entry.py
+            
+          echo "CLI build completed"
+          ls -la dist/
+
+      # ----------------- GUI BUILD -----------------
+      - name: Build GUI Executable with PyInstaller
+        run: |
+          # Determine separator for add-data based on OS
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            SEP=";"
+          else
+            SEP=":"
+          fi
+          
+          echo "Building GUI executable for ${{ matrix.os }}"
+          
+          pyinstaller --clean -y \
+            --distpath dist \
+            --workpath build_gui \
+            --onefile \
+            --windowed \
+            --name voxbridge-gui${{ matrix.ext }} \
+            --add-data "voxbridge${SEP}voxbridge" \
+            --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
+            --hidden-import voxbridge.orchestrated_converter \
+            --hidden-import voxbridge.pipeline_runner \
+            --hidden-import voxbridge.cross_platform \
+            --hidden-import voxbridge.error_handler \
+            --hidden-import voxbridge.utils.paths \
+            --hidden-import voxbridge.utils.detect \
+            --hidden-import voxbridge.gui.app \
+            gui_entry.py
+            
+          echo "GUI build completed"
+          ls -la dist/
+
+      # ----------------- PACKAGE -----------------
+      - name: Create release package
+        run: |
+          # Create release directory structure
+          mkdir -p release/voxbridge
+          
+          echo "Copying files to release package..."
+          
+          # Copy executables
+          cp dist/voxbridge${{ matrix.ext }} release/voxbridge/
+          cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/
+          
+          # Copy node_scripts with dependencies
+          cp -r node_scripts release/voxbridge/
+          cp -r build/node_binary release/voxbridge/
+          
+          # Copy documentation
+          cp README.md release/voxbridge/ 2>/dev/null || echo "README.md not found"
+          cp LICENSE release/voxbridge/ 2>/dev/null || echo "LICENSE not found"
+          cp -r docs release/voxbridge/ 2>/dev/null || echo "docs directory not found"
+          cp -r examples release/voxbridge/ 2>/dev/null || echo "examples directory not found"
+          
+          # List what we have
+          echo "Package contents:"
+          find release/voxbridge -type f | head -20
+          
+          # Create archive with platform-specific naming
+          cd release
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            tar -czf voxbridge-linux-x64.tar.gz voxbridge/
+            mv voxbridge-linux-x64.tar.gz ../
+            echo "Created voxbridge-linux-x64.tar.gz"
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            tar -czf voxbridge-macos-x64.tar.gz voxbridge/
+            mv voxbridge-macos-x64.tar.gz ../
+            echo "Created voxbridge-macos-x64.tar.gz"
+          else
+            # Use built-in zip command
+            powershell Compress-Archive -Path voxbridge -DestinationPath ../voxbridge-windows-x64.zip -Force
+            echo "Created voxbridge-windows-x64.zip"
+          fi
+          
+          # Show final files
+          ls -la ../voxbridge-*.* || echo "No archive files created"
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: voxbridge-${{ matrix.os }}
+<<<<<<< HEAD
           path: voxbridge-${{ matrix.os }}.zip
+=======
+          path: |
+            voxbridge-*.tar.gz
+            voxbridge-*.zip
+          if-no-files-found: error
+          
+      - name: List final artifacts
+        run: |
+          echo "Final artifacts:"
+          ls -la voxbridge-*.* || echo "No artifacts found"
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
   release:
     needs: build
     runs-on: ubuntu-latest
+<<<<<<< HEAD
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./release
+=======
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List downloaded files
+        run: ls -R ./artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find ./artifacts -name "*.tar.gz" -exec cp {} release/ \;
+          find ./artifacts -name "*.zip" -exec cp {} release/ \;
+          ls -lh release/
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+<<<<<<< HEAD
           files: ./release//*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+=======
+          files: release/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## VoxBridge Release
+
+            Complete standalone executables for Linux, macOS, and Windows.
+            Includes bundled Node.js processing - no additional dependencies required!
+
+            ### Downloads:
+            - **Linux**: `voxbridge-linux-x64.tar.gz`
+            - **macOS**: `voxbridge-macos-x64.tar.gz`  
+            - **Windows**: `voxbridge-windows-x64.zip`
+
+            ### Features:
+            - Single executable with all dependencies
+            - Node.js processing bundled
+            - CLI and GUI versions included
+            - Full texture support
+            - Animation preservation
+            - Cross-platform compatible
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab

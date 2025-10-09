@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #!/bin/bash
 # VoxBridge Cross-Platform Build Script
 # Builds standalone executables for Linux and macOS
@@ -192,3 +193,20 @@ print_status "Distribution packages are available in release_builds/"
 # Show file sizes
 print_status "Package sizes:"
 ls -lh release_builds/
+=======
+#!/bin/bash
+# VoxBridge Universal Build Script for Linux/macOS
+# This script runs the Python build script which detects the platform automatically
+
+echo "Starting VoxBridge build process..."
+echo
+
+# Check if Python is available
+if ! command -v python3 &> /dev/null; then
+    echo "Error: Python3 not found. Please install Python 3.8+ and try again."
+    exit 1
+fi
+
+# Run the Python build script
+python3 build_all.py
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab

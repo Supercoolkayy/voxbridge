@@ -136,12 +136,15 @@ Each standalone package contains:
 - All required libraries
 - Platform-specific binaries
 
+<<<<<<< HEAD
 
 ## ⚡ Performance & Best Practices
 
 - Simple/static models run fine without Node.js.
 - Complex/animated/large models require Node.js for stable performance.
 
+=======
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 ## ⚖️ Standalone vs Python Installation
 
 | Feature          | Standalone           | Python Installation     |

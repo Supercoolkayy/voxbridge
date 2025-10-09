@@ -23,6 +23,7 @@
 
 > ⚠️ **Important**: Always export your assets from The Sandbox VoxEdit in GLB format for best results.
 
+<<<<<<< HEAD
 
 ## 🎮 Target Platforms & Processing Logic
 
@@ -65,6 +66,33 @@ voxbridge convert --input model.glb --output model.gltf
 voxbridge convert --input model.glb --output model.gltf --target unity
 voxbridge convert --input model.glb --output model.gltf --target roblox
 
+=======
+## 🎮 Target Platforms
+
+### Unity
+
+- **Input**: VoxEdit .glb/.gltf files
+- **Output**: Optimized glTF files for Unity
+- **Features**: Full PBR materials, mesh optimization, texture handling
+
+### Roblox
+
+- **Input**: VoxEdit .glb/.gltf files
+- **Output**: Roblox-compatible glTF files
+- **Features**: Simplified materials, Roblox-specific optimizations
+
+## 🔧 Basic CLI Usage
+
+### Single File Conversion
+
+```bash
+# Basic conversion for Roblox
+voxbridge convert --input model.glb --output model.gltf --target roblox
+
+# Basic conversion for Unity
+voxbridge convert --input model.glb --output model.gltf --target unity
+
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 # With optimization (recommended)
 voxbridge convert --input model.glb --output model.gltf --target roblox --optimize-mesh
 ```

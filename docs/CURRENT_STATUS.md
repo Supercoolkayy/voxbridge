@@ -75,11 +75,15 @@
 
 ---
 
+<<<<<<< HEAD
 
 ## ⚡ Performance & Best Practices
 
 - Simple/static models run fine without Node.js.
 - Complex/animated/large models require Node.js for stable performance.
+=======
+## 📈 **PERFORMANCE METRICS:**
+>>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 
 ### **Conversion Performance:**
 
