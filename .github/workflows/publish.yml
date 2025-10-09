@@ -22,6 +22,7 @@ jobs:
             ext: ".exe"
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repo
@@ -99,6 +100,7 @@ jobs:
       # ----------------- CLI BUILD -----------------
       - name: Build CLI Executable with PyInstaller
         shell: bash
+        timeout-minutes: 30
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -125,6 +127,10 @@ jobs:
             --hidden-import voxbridge.error_handler \
             --hidden-import voxbridge.utils.paths \
             --hidden-import voxbridge.utils.detect \
+            --exclude-module matplotlib \
+            --exclude-module pandas \
+            --exclude-module jupyter \
+            --exclude-module IPython \
             cli_entry.py
             
           echo "CLI build completed"
@@ -133,6 +139,7 @@ jobs:
       # ----------------- GUI BUILD -----------------
       - name: Build GUI Executable with PyInstaller
         shell: bash
+        timeout-minutes: 30
         run: |
           # Determine separator for add-data based on OS
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -159,6 +166,10 @@ jobs:
             --hidden-import voxbridge.utils.paths \
             --hidden-import voxbridge.utils.detect \
             --hidden-import voxbridge.gui.app \
+            --exclude-module matplotlib \
+            --exclude-module pandas \
+            --exclude-module jupyter \
+            --exclude-module IPython \
             gui_entry.py
             
           echo "GUI build completed"
@@ -167,6 +178,7 @@ jobs:
       # ----------------- PACKAGE -----------------
       - name: Create release package
         shell: bash
+        timeout-minutes: 10
         run: |
           # Create release directory structure
           mkdir -p release/voxbridge
@@ -189,7 +201,7 @@ jobs:
           
           # List what we have
           echo "Package contents:"
-          find release/voxbridge -type f | head -20
+          find release/voxbridge -type f 2>/dev/null | head -20 || echo "No files found or find command failed"
           
           # Create archive with platform-specific naming
           cd release
