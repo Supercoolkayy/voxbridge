@@ -100,6 +100,31 @@ class UnityProfile(PlatformProfile):
         
         return gltf_data
     
+    def pack_textures_for_unity(self, gltf_path: Path) -> bool:
+        """
+        Pack PBR textures into Unity's Standard Shader format.
+        This is called after the GLTF file is written to disk.
+        """
+        try:
+            from .texture_optimizer import pack_unity_pbr_textures
+            result = pack_unity_pbr_textures(gltf_path, gltf_path.parent)
+            if result['success']:
+                if self.debug:
+                    print(f"Unity texture packing: {result['message']}")
+                return True
+            else:
+                if self.debug:
+                    print(f"Unity texture packing failed: {result.get('error', 'Unknown error')}")
+                return False
+        except ImportError:
+            if self.debug:
+                print("Texture optimizer not available for Unity packing")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Unity texture packing error: {e}")
+            return False
+    
     def validate_output(self, gltf_path: Path) -> Tuple[bool, List[str]]:
         """Validate glTF for Unity compatibility"""
         errors = []
@@ -249,6 +274,10 @@ class RobloxProfile(PlatformProfile):
                     if 'baseColorTexture' in pbr:
                         simplified_material['pbrMetallicRoughness']['baseColorTexture'] = pbr['baseColorTexture']
                 
+                # Keep normal texture if it exists
+                if 'normalTexture' in material:
+                    simplified_material['normalTexture'] = material['normalTexture']
+                
                 # Replace the material completely
                 material.clear()
                 material.update(simplified_material)
@@ -306,6 +335,31 @@ class RobloxProfile(PlatformProfile):
             print("Roblox optimization complete")
         
         return gltf_data
+    
+    def simplify_textures_for_roblox(self, gltf_path: Path) -> bool:
+        """
+        Simplify textures for Roblox: Keep only BaseColor and Normal maps.
+        This is called after the GLTF file is written to disk.
+        """
+        try:
+            from .texture_optimizer import simplify_for_roblox
+            result = simplify_for_roblox(gltf_path, gltf_path.parent)
+            if result['success']:
+                if self.debug:
+                    print(f"Roblox texture simplification: {result['message']}")
+                return True
+            else:
+                if self.debug:
+                    print(f"Roblox texture simplification failed: {result.get('error', 'Unknown error')}")
+                return False
+        except ImportError:
+            if self.debug:
+                print("Texture optimizer not available for Roblox simplification")
+            return False
+        except Exception as e:
+            if self.debug:
+                print(f"Roblox texture simplification error: {e}")
+            return False
     
     def validate_output(self, gltf_path: Path) -> Tuple[bool, List[str]]:
         """Validate glTF for Roblox compatibility"""
@@ -387,6 +441,81 @@ class RobloxProfile(PlatformProfile):
         return None
 
 
+class StandardGLTFProfile(PlatformProfile):
+    """Standard GLTF export profile (no platform-specific modifications)"""
+    
+    def __init__(self, debug: bool = False):
+        super().__init__(debug)
+        self.profile_name = "gltf"
+    
+    def optimize_gltf(self, gltf_data: Dict, output_path: Path) -> Dict:
+        """
+        Standard GLTF export - no modifications.
+        Works fine in GLTF/GLB viewers.
+        """
+        if self.debug:
+            print("Using standard GLTF profile (no modifications)...")
+        
+        # No modifications - return as-is for full GLTF compliance
+        return gltf_data
+    
+    def validate_output(self, gltf_path: Path) -> Tuple[bool, List[str]]:
+        """Validate glTF for standard compliance"""
+        errors = []
+        warnings = []
+        
+        try:
+            with open(gltf_path, 'r', encoding='utf-8') as f:
+                gltf_data = json.load(f)
+            
+            # Basic GLTF validation
+            if 'asset' not in gltf_data:
+                errors.append("Missing asset information")
+            
+            if 'scene' not in gltf_data:
+                warnings.append("Missing default scene definition")
+            
+            # Run glTF validator if available
+            validation_result = self._run_gltf_validator(gltf_path)
+            if validation_result:
+                is_valid, validator_errors = validation_result
+                if not is_valid:
+                    errors.extend(validator_errors)
+            
+        except Exception as e:
+            errors.append(f"Validation failed: {e}")
+        
+        return len(errors) == 0, errors + warnings
+    
+    def _run_gltf_validator(self, gltf_path: Path) -> Optional[Tuple[bool, List[str]]]:
+        """Run glTF-Validator if available"""
+        try:
+            # Check if gltf-validator is available
+            if shutil.which("gltf-validator"):
+                result = subprocess.run(
+                    ["gltf-validator", str(gltf_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                if result.returncode == 0:
+                    return True, []
+                else:
+                    # Parse validation errors
+                    errors = []
+                    for line in result.stderr.split('\n'):
+                        if 'ERROR' in line:
+                            errors.append(line.strip())
+                    return False, errors
+            
+        except Exception as e:
+            if self.debug:
+                print(f"glTF validator not available: {e}")
+        
+        return None
+
+
 class PlatformProfileManager:
     """Manages platform-specific export profiles"""
     
@@ -394,7 +523,8 @@ class PlatformProfileManager:
         self.debug = debug
         self.profiles = {
             'unity': UnityProfile(debug),
-            'roblox': RobloxProfile(debug)
+            'roblox': RobloxProfile(debug),
+            'gltf': StandardGLTFProfile(debug)
         }
     
     def get_profile(self, platform: str) -> PlatformProfile:
@@ -404,8 +534,8 @@ class PlatformProfileManager:
             return self.profiles[platform_lower]
         else:
             if self.debug:
-                print(f"Unknown platform '{platform}', using Unity profile")
-            return self.profiles['unity']
+                print(f"Unknown platform '{platform}', using standard GLTF profile")
+            return self.profiles['gltf']
     
     def apply_profile(self, gltf_data: Dict, output_path: Path, platform: str) -> Dict:
         """Apply platform-specific optimizations"""
@@ -416,6 +546,37 @@ class PlatformProfileManager:
         """Validate output for platform compatibility"""
         profile = self.get_profile(platform)
         return profile.validate_output(gltf_path)
+    
+    def apply_post_processing(self, gltf_path: Path, platform: str) -> bool:
+        """
+        Apply platform-specific post-processing after GLTF file is written.
+        This includes texture packing for Unity and texture simplification for Roblox.
+        """
+        profile = self.get_profile(platform)
+        
+        try:
+            # Unity: Pack PBR textures into Unity's Standard Shader format
+            if platform.lower() == 'unity' and hasattr(profile, 'pack_textures_for_unity'):
+                if self.debug:
+                    print("Applying Unity texture packing (R=Metallic, G=Smoothness, B=AO, A=Gloss)...")
+                return profile.pack_textures_for_unity(gltf_path)
+            
+            # Roblox: Simplify textures (BaseColor + Normal only)
+            elif platform.lower() == 'roblox' and hasattr(profile, 'simplify_textures_for_roblox'):
+                if self.debug:
+                    print("Applying Roblox texture simplification (BaseColor + Normal)...")
+                return profile.simplify_textures_for_roblox(gltf_path)
+            
+            # GLTF: No post-processing needed
+            else:
+                if self.debug:
+                    print(f"No post-processing needed for {platform}")
+                return True
+                
+        except Exception as e:
+            if self.debug:
+                print(f"Post-processing failed for {platform}: {e}")
+            return False
     
     def create_platform_specific_outputs(self, gltf_data: Dict, base_output_path: Path, platform: str) -> List[Path]:
         """Create platform-specific output files"""
@@ -430,6 +591,9 @@ class PlatformProfileManager:
         # Write optimized glTF
         with open(platform_output, 'w', encoding='utf-8') as f:
             json.dump(optimized_data, f, indent=2)
+        
+        # Apply post-processing (texture packing, etc.)
+        self.apply_post_processing(platform_output, platform)
         
         outputs.append(platform_output)
         

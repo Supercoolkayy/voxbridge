@@ -1252,10 +1252,13 @@ def convert(
             output_dir = output
     
     # Validate target platform
-    valid_targets = ["unity", "roblox"]
+    valid_targets = ["unity", "roblox", "gltf"]
     if target.lower() not in valid_targets:
         console.print(f"[bold red]Error: Invalid target platform '{target}'")
-        console.print(f"[yellow]Valid targets are: {', '.join(valid_targets)}")
+        console.print(f"[yellow]Valid targets are:")
+        console.print(f"  • [cyan]unity[/cyan]  - Unity engine with packed PBR textures (fixes gray materials)")
+        console.print(f"  • [cyan]roblox[/cyan] - Roblox with simplified materials (BaseColor + Normal)")
+        console.print(f"  • [cyan]gltf[/cyan]   - Standard GLTF (no modifications, works in GLTF viewers)")
         raise typer.Exit(1)
     
     # Check if input file exists

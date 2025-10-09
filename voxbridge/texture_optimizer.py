@@ -1,8 +1,5 @@
 import os
-<<<<<<< HEAD
-=======
 import shutil
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
 from pathlib import Path
 from PIL import Image
 import numpy as np
@@ -16,11 +13,6 @@ def resize_texture(image_path, max_size=1024):
     Returns the path to the resized image (may overwrite original).
     """
     img = Image.open(image_path)
-<<<<<<< HEAD
-    if max(img.size) > max_size:
-        img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-        img.save(image_path)
-=======
     
     # Convert to sRGB color space for consistency
     if img.mode != 'RGB':
@@ -42,7 +34,6 @@ def resize_texture(image_path, max_size=1024):
         else:
             img.save(image_path)
     
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
     return image_path
 
 def generate_texture_atlas(image_paths, atlas_size=1024):
@@ -165,9 +156,6 @@ def update_gltf_with_atlas(gltf_path, mapping, atlas_filename):
                                         print(f"Warning: Could not process UVs for primitive: {e}")
                                         continue
     
-<<<<<<< HEAD
-    gltf.save(gltf_path) 
-=======
     gltf.save(gltf_path)
 
 def validate_uv_maps(gltf_path):
@@ -429,5 +417,222 @@ def flatten_texture_paths(gltf_path, output_dir=None):
             return {'success': True, 'message': 'No texture path changes needed'}
             
     except Exception as e:
-        return {'success': False, 'error': f'Texture path flattening failed: {e}'} 
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
+        return {'success': False, 'error': f'Texture path flattening failed: {e}'}
+
+def pack_unity_pbr_textures(gltf_path, output_dir=None):
+    """
+    Pack PBR textures into Unity's Standard Shader format:
+    - R = Metallic
+    - G = Smoothness (Inverted Roughness)
+    - B = Ambient Occlusion
+    - A = Gloss (same as Smoothness)
+    
+    This solves the gray texture problem in Unity by providing
+    a single packed texture Unity's Standard Shader expects.
+    """
+    if output_dir is None:
+        output_dir = Path(gltf_path).parent
+    
+    try:
+        import json
+        
+        # Load GLTF
+        with open(gltf_path, 'r', encoding='utf-8') as f:
+            gltf_data = json.load(f)
+        
+        if 'materials' not in gltf_data or not gltf_data['materials']:
+            return {'success': True, 'message': 'No materials to process'}
+        
+        packed_count = 0
+        
+        for mat_idx, material in enumerate(gltf_data['materials']):
+            if 'pbrMetallicRoughness' not in material:
+                continue
+            
+            pbr = material['pbrMetallicRoughness']
+            
+            # Find metallic/roughness texture
+            metallic_roughness_tex = None
+            if 'metallicRoughnessTexture' in pbr:
+                tex_idx = pbr['metallicRoughnessTexture']['index']
+                if tex_idx < len(gltf_data.get('textures', [])):
+                    texture = gltf_data['textures'][tex_idx]
+                    img_idx = texture.get('source')
+                    if img_idx is not None and img_idx < len(gltf_data.get('images', [])):
+                        image = gltf_data['images'][img_idx]
+                        if 'uri' in image:
+                            metallic_roughness_tex = output_dir / image['uri']
+            
+            # Find occlusion texture
+            occlusion_tex = None
+            if 'occlusionTexture' in material:
+                tex_idx = material['occlusionTexture']['index']
+                if tex_idx < len(gltf_data.get('textures', [])):
+                    texture = gltf_data['textures'][tex_idx]
+                    img_idx = texture.get('source')
+                    if img_idx is not None and img_idx < len(gltf_data.get('images', [])):
+                        image = gltf_data['images'][img_idx]
+                        if 'uri' in image:
+                            occlusion_tex = output_dir / image['uri']
+            
+            # If we have textures to pack, create Unity-compatible packed texture
+            if metallic_roughness_tex and metallic_roughness_tex.exists():
+                packed_texture_name = f"{Path(gltf_path).stem}_material{mat_idx}_Unity_Packed.png"
+                packed_texture_path = output_dir / packed_texture_name
+                
+                # Load metallic/roughness texture
+                mr_img = Image.open(metallic_roughness_tex).convert('RGBA')
+                width, height = mr_img.size
+                mr_pixels = np.array(mr_img)
+                
+                # Load occlusion texture (or create white if missing)
+                if occlusion_tex and occlusion_tex.exists():
+                    ao_img = Image.open(occlusion_tex).convert('L')
+                    ao_img = ao_img.resize((width, height), Image.Resampling.LANCZOS)
+                    ao_pixels = np.array(ao_img)
+                else:
+                    ao_pixels = np.ones((height, width), dtype=np.uint8) * 255
+                
+                # Create packed texture
+                # GLTF stores: B=Metallic, G=Roughness
+                # Unity needs: R=Metallic, G=Smoothness, B=AO, A=Smoothness
+                packed = np.zeros((height, width, 4), dtype=np.uint8)
+                packed[:, :, 0] = mr_pixels[:, :, 2]  # R = Metallic (from B channel)
+                packed[:, :, 1] = 255 - mr_pixels[:, :, 1]  # G = Smoothness (inverted roughness)
+                packed[:, :, 2] = ao_pixels  # B = AO
+                packed[:, :, 3] = packed[:, :, 1]  # A = Smoothness (same as G)
+                
+                # Save packed texture
+                packed_img = Image.fromarray(packed, 'RGBA')
+                packed_img.save(packed_texture_path, 'PNG', optimize=True)
+                
+                # Add new image to GLTF
+                if 'images' not in gltf_data:
+                    gltf_data['images'] = []
+                
+                packed_img_idx = len(gltf_data['images'])
+                gltf_data['images'].append({
+                    'uri': packed_texture_name,
+                    'name': f'Material{mat_idx}_Unity_Packed'
+                })
+                
+                # Add new texture reference
+                if 'textures' not in gltf_data:
+                    gltf_data['textures'] = []
+                
+                packed_tex_idx = len(gltf_data['textures'])
+                gltf_data['textures'].append({
+                    'source': packed_img_idx,
+                    'name': f'Material{mat_idx}_Unity_Packed_Tex'
+                })
+                
+                # Update material to use packed texture
+                pbr['metallicRoughnessTexture'] = {'index': packed_tex_idx}
+                
+                # Remove separate occlusion texture (now in packed texture)
+                if 'occlusionTexture' in material:
+                    del material['occlusionTexture']
+                
+                packed_count += 1
+                print(f"Packed Unity texture for material {mat_idx}: {packed_texture_name}")
+        
+        # Save updated GLTF
+        with open(gltf_path, 'w', encoding='utf-8') as f:
+            json.dump(gltf_data, f, indent=2)
+        
+        return {
+            'success': True,
+            'packed_count': packed_count,
+            'message': f'Packed {packed_count} Unity PBR textures'
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            'success': False,
+            'error': f'Unity texture packing failed: {e}',
+            'traceback': traceback.format_exc()
+        }
+
+def simplify_for_roblox(gltf_path, output_dir=None):
+    """
+    Simplify GLTF for Roblox: Keep only BaseColor (Albedo) and Normal maps.
+    Roblox doesn't use metallic/roughness packing like Unity.
+    """
+    if output_dir is None:
+        output_dir = Path(gltf_path).parent
+    
+    try:
+        import json
+        
+        # Load GLTF
+        with open(gltf_path, 'r', encoding='utf-8') as f:
+            gltf_data = json.load(f)
+        
+        if 'materials' not in gltf_data or not gltf_data['materials']:
+            return {'success': True, 'message': 'No materials to process'}
+        
+        textures_to_keep = set()
+        
+        for material in gltf_data['materials']:
+            if 'pbrMetallicRoughness' in material:
+                pbr = material['pbrMetallicRoughness']
+                
+                # Keep only baseColor texture
+                if 'baseColorTexture' in pbr:
+                    textures_to_keep.add(pbr['baseColorTexture']['index'])
+                
+                # Remove metallic/roughness texture
+                if 'metallicRoughnessTexture' in pbr:
+                    del pbr['metallicRoughnessTexture']
+                
+                # Set default metallic/roughness values
+                pbr['metallicFactor'] = 0.0  # No metallic for Roblox
+                pbr['roughnessFactor'] = 1.0  # Full roughness
+            
+            # Keep normal map if exists
+            if 'normalTexture' in material:
+                textures_to_keep.add(material['normalTexture']['index'])
+            
+            # Remove other texture maps
+            for tex_key in ['occlusionTexture', 'emissiveTexture']:
+                if tex_key in material:
+                    del material[tex_key]
+        
+        # Clean up unused textures and images
+        if 'textures' in gltf_data:
+            used_images = set()
+            for tex_idx in textures_to_keep:
+                if tex_idx < len(gltf_data['textures']):
+                    texture = gltf_data['textures'][tex_idx]
+                    if 'source' in texture:
+                        used_images.add(texture['source'])
+            
+            # Remove unused image files
+            if 'images' in gltf_data:
+                for img_idx, image in enumerate(gltf_data['images']):
+                    if img_idx not in used_images and 'uri' in image:
+                        img_path = output_dir / image['uri']
+                        if img_path.exists():
+                            try:
+                                os.remove(img_path)
+                                print(f"Removed unused texture for Roblox: {image['uri']}")
+                            except:
+                                pass
+        
+        # Save updated GLTF
+        with open(gltf_path, 'w', encoding='utf-8') as f:
+            json.dump(gltf_data, f, indent=2)
+        
+        return {
+            'success': True,
+            'message': f'Simplified for Roblox: kept {len(textures_to_keep)} texture(s) (BaseColor + Normal)'
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            'success': False,
+            'error': f'Roblox simplification failed: {e}',
+            'traceback': traceback.format_exc()
+        } 

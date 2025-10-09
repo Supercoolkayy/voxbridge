@@ -2,6 +2,16 @@
 
 **How to use VoxBridge for converting VoxEdit models to Unity and Roblox**
 
+## 🎉 Version 2.0 - Platform-Specific Material Export!
+
+VoxBridge now supports **platform-specific texture packing** with the `-t` (target) flag:
+
+- **`-t unity`**: Packs PBR textures for Unity's Standard Shader (fixes gray materials!)
+- **`-t roblox`**: Simplifies materials for Roblox (keeps only BaseColor + Normal)
+- **`-t gltf`**: Standard GLTF export (no modifications, universal compatibility)
+
+See the [Texture Packing Guide](TEXTURE_PACKING_GUIDE.md) for complete details.
+
 ## 📋 Supported Formats
 
 ### ✅ Input Formats
@@ -23,87 +33,116 @@
 
 > ⚠️ **Important**: Always export your assets from The Sandbox VoxEdit in GLB format for best results.
 
-
-## 🎮 Target Platforms & Processing Logic
-
-### Unity
-- **Input**: VoxEdit .glb/.gltf files
-- **Output**: Optimized glTF files for Unity
-- **Features**: Full PBR materials, mesh optimization, texture handling
-- **Target flag (`--target unity`)**: Remaps PBR channels for Unity’s shader format, fixes gray textures.
-
-### Roblox
-- **Input**: VoxEdit .glb/.gltf files
-- **Output**: Roblox-compatible glTF files
-- **Features**: Simplified materials, Roblox-specific optimizations
-- **Target flag (`--target roblox`)**: Lightweight materials, Roblox-specific optimizations.
-
-### Static vs. Animated Export Logic
-- **Static Models**: Exported as tri-mesh; original skeleton is deleted. Fast processing, Node.js not required.
-- **Animated/Skinned Models**: Exported with skinning; static duplicates are deleted. Animation/skin preserved, Node.js required for full feature support.
-
-### Performance Notes
-- Simple/static models run fine without Node.js.
-- Complex/animated/large models require Node.js for stable performance.
-
-## 🔧 Basic CLI Usage
-
-
-### Single File Conversion
-
-```bash
-# Static model export (Unity)
-voxbridge convert --input static_model.glb --output static_model.gltf --target unity --force-static
-
-# Animated/skinned model export (Roblox)
-voxbridge convert --input animated_character.glb --output animated_character.gltf --target roblox --force-node
-
-# Default GLTF export
-voxbridge convert --input model.glb --output model.gltf
-
-# Target flag usage
-voxbridge convert --input model.glb --output model.gltf --target unity
-voxbridge convert --input model.glb --output model.gltf --target roblox
-
-=======
 ## 🎮 Target Platforms
 
-### Unity
+### Unity (`-t unity`) - Fixes Gray Materials!
 
 - **Input**: VoxEdit .glb/.gltf files
-- **Output**: Optimized glTF files for Unity
-- **Features**: Full PBR materials, mesh optimization, texture handling
+- **Output**: Unity-optimized glTF with packed PBR textures
+- **Material Handling**: Automatically packs separate PBR maps into Unity's Standard Shader format
+  - R = Metallic, G = Smoothness, B = AO, A = Gloss
+- **Fixes**: Gray material problem caused by Unity's different PBR interpretation
+- **Works in**: Both Unity AND GLTF viewers
 
-### Roblox
+### Roblox (`-t roblox`) - Lightweight & Optimized
 
 - **Input**: VoxEdit .glb/.gltf files
-- **Output**: Roblox-compatible glTF files
-- **Features**: Simplified materials, Roblox-specific optimizations
+- **Output**: Roblox-compatible glTF with simplified materials
+- **Material Handling**: Keeps only what Roblox uses (BaseColor + Normal)
+- **Benefits**: Smaller files, faster imports, engine-optimized
+- **Removes**: Metallic/roughness/occlusion textures (unused by Roblox)
+
+### Standard GLTF (`-t gltf`) - Universal Compatibility
+
+- **Input**: VoxEdit .glb/.gltf files
+- **Output**: Standard GLTF with full PBR support
+- **Material Handling**: No modifications, full GLTF spec compliance
+- **Use for**: GLTF/GLB viewers, other game engines, maximum compatibility
 
 ## 🔧 Basic CLI Usage
 
 ### Single File Conversion
 
 ```bash
-# Basic conversion for Roblox
-voxbridge convert --input model.glb --output model.gltf --target roblox
+# Unity export (fixes gray materials with packed textures!)
+voxbridge convert -i model.glb -o output/ -t unity
 
-# Basic conversion for Unity
-voxbridge convert --input model.glb --output model.gltf --target unity
+# Roblox export (lightweight, optimized materials)
+voxbridge convert -i model.glb -o output/ -t roblox
 
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
-# With optimization (recommended)
-voxbridge convert --input model.glb --output model.gltf --target roblox --optimize-mesh
+# Standard GLTF export (universal compatibility)
+voxbridge convert -i model.glb -o output/ -t gltf
+
+# Unity with mesh optimization (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t unity --optimize-mesh
+
+# Roblox in fast mode (no optimizations)
+voxbridge convert -i model.glb -o output/ -t roblox --fast
+```
+
+### Static vs Animated Models
+
+```bash
+# Static model (fast, no Node.js needed)
+# - Original skeleton removed
+# - Optimized tri-mesh export
+voxbridge convert -i building.glb -o output/ -t unity --force-static
+
+# Animated model (requires Node.js)
+# - Full rigging preserved
+# - Skinning maintained
+# - Static duplicates removed
+voxbridge convert -i character.glb -o output/ -t unity --force-node
+
+# Auto-detect (default - VoxBridge chooses best path)
+voxbridge convert -i model.glb -o output/ -t unity
 ```
 
 ### Batch Processing
 
 ```bash
-# Convert all GLB files in a folder
-voxbridge batch ./input_folder --output-dir ./output_folder --target roblox
+# Batch convert to Unity (with texture packing)
+voxbridge batch ./input_folder -o ./output_folder -t unity
 
-# Convert with optimization
-voxbridge batch ./input_folder --output-dir ./output_folder --target unity --optimize-mesh
+# Batch convert to Roblox (simplified materials)
+voxbridge batch ./input_folder -o ./output_folder -t roblox
+
+# Batch convert with optimization (requires Node.js)
+voxbridge batch ./input_folder -o ./output_folder -t unity --optimize-mesh
+```
+
+## 🚀 Performance & Node.js Requirements
+
+### Works Without Node.js
+
+- ✅ Basic conversions (`-t unity`, `-t roblox`, `-t gltf`)
+- ✅ Static model processing (`--force-static`)
+- ✅ Simple models without animations
+- ✅ GLB packing (`--pack-glb`)
+- ✅ Platform-specific texture packing (Unity/Roblox)
+
+### Requires Node.js (18+ LTS)
+
+- ⚡ Complex model processing (animations, rigging)
+- ⚡ Mesh optimization (`--optimize-mesh`)
+- ⚡ Draco compression (`--use-draco`)
+- ⚡ Texture resizing (`--texture-size`)
+- ⚡ Quantization (`--quantize`)
+- ⚡ Large file processing (>50MB)
+- ⚡ 2-3x faster processing on complex assets
+
+### Install Node.js
+
+```bash
+# Download from nodejs.org (LTS version recommended)
+# https://nodejs.org/
+
+# Verify installation
+node --version
+npm --version
+
+# Check VoxBridge can find Node.js
+voxbridge doctor
 ```
 
 ## ⚙️ Optimization Flags
@@ -126,43 +165,66 @@ voxbridge batch ./input_folder --output-dir ./output_folder --target unity --opt
 
 ## 📊 Example Commands
 
-### For Roblox
+### For Unity (Fixes Gray Materials!)
 
 ```bash
-# Basic Roblox conversion
-voxbridge convert --input model.glb --output model.gltf --target roblox
+# Basic Unity conversion with texture packing
+voxbridge convert -i model.glb -o output/ -t unity
 
-# Optimized Roblox conversion
-voxbridge convert --input model.glb --output model.gltf --target roblox --optimize-mesh
+# Unity with all optimizations (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t unity --optimize-mesh --use-draco
 
-# Batch convert for Roblox
-voxbridge batch ./input_folder --output-dir ./output_folder --target roblox --optimize-mesh
-```
+# Unity for static model (fast, no Node.js)
+voxbridge convert -i building.glb -o output/ -t unity --force-static
 
-### For Unity
-
-```bash
-# Basic Unity conversion
-voxbridge convert --input model.glb --output model.gltf --target unity
-
-# Optimized Unity conversion
-voxbridge convert --input model.glb --output model.gltf --target unity --optimize-mesh
+# Unity for animated character (requires Node.js)
+voxbridge convert -i character.glb -o output/ -t unity --force-node
 
 # Batch convert for Unity
-voxbridge batch ./input_folder --output-dir ./output_folder --target unity --optimize-mesh
+voxbridge batch ./input_folder -o ./output_folder -t unity
+```
+
+### For Roblox (Optimized & Lightweight)
+
+```bash
+# Basic Roblox conversion (simplified materials)
+voxbridge convert -i model.glb -o output/ -t roblox
+
+# Roblox with Draco compression (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t roblox --use-draco
+
+# Roblox fast mode (no optimizations)
+voxbridge convert -i model.glb -o output/ -t roblox --fast
+
+# Batch convert for Roblox
+voxbridge batch ./input_folder -o ./output_folder -t roblox
+```
+
+### For Standard GLTF (Universal)
+
+```bash
+# Standard GLTF export (no modifications)
+voxbridge convert -i model.glb -o output/ -t gltf
+
+# Standard GLTF with Draco (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t gltf --use-draco
 ```
 
 ### Advanced Examples
 
 ```bash
-# Generate performance report
-voxbridge convert --input model.glb --output model.gltf --target roblox --report
+# Unity with custom texture size (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t unity --texture-size 2048
 
-# Combine all optimizations for Unity
-voxbridge convert --input model.glb --output model.gltf --target unity --optimize-mesh --generate-atlas --compress-textures --report
+# Roblox with verbose output
+voxbridge convert -i model.glb -o output/ -t roblox --verbose
 
-# Verbose output for troubleshooting
-voxbridge convert --input model.glb --output model.gltf --target roblox --verbose --debug
+# Unity with debug info
+voxbridge convert -i model.glb -o output/ -t unity --debug
+
+# Full optimization for Unity (requires Node.js)
+voxbridge convert -i model.glb -o output/ -t unity \
+  --optimize-mesh --use-draco --quantize --texture-size 1024
 ```
 
 ## 📈 Performance Report
