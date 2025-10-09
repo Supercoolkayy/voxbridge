@@ -1,41 +1,3 @@
-<<<<<<< HEAD
-{
-  "name": "voxbridge-node-tools",
-  "version": "0.1.0",
-  "description": "Node.js tools for complex GLTF/GLB processing in VoxBridge",
-  "main": "process_complex.js",
-  "bin": {
-    "process-complex": "./process_complex.js"
-  },
-  "scripts": {
-    "process": "node process_complex.js",
-    "validate": "node validate.js",
-    "roblox-map": "node roblox_map.js",
-    "unity-preset": "node unity_preset.js"
-  },
-  "dependencies": {
-    "@gltf-transform/cli": "^3.0.0",
-    "@gltf-transform/core": "^3.0.0",
-    "@gltf-transform/functions": "^3.0.0",
-    "adm-zip": "^0.5.16",
-    "commander": "^11.0.0",
-    "fs-extra": "^11.0.0",
-    "gltf-pipeline": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=16.0.0"
-  },
-  "keywords": [
-    "gltf",
-    "glb",
-    "3d",
-    "converter",
-    "voxbridge"
-  ],
-  "author": "VoxBridge Team",
-  "license": "MIT"
-}
-=======
 {
   "name": "voxbridge-node-tools",
   "version": "0.1.0",
@@ -80,4 +42,3 @@
     "nexe": "^5.0.0-beta.4"
   }
 }
->>>>>>> e3683c0a331160c99926a8fc684c9c9f0a9a3aab
