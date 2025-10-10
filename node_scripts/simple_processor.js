@@ -103,9 +103,9 @@ function processGLTF(inputPath, outputPath, target, verbose = false) {
 
     // Apply platform-specific modifications
     if (target === 'unity') {
-      gltfData = modifyForUnity(gltfData);
+      gltfData = modifyForUnity(gltfData, verbose);
     } else if (target === 'roblox') {
-      gltfData = modifyForRoblox(gltfData);
+      gltfData = modifyForRoblox(gltfData, verbose);
     }
 
     // Write output
@@ -130,7 +130,7 @@ function processGLTF(inputPath, outputPath, target, verbose = false) {
   }
 }
 
-function modifyForUnity(gltfData) {
+function modifyForUnity(gltfData, verbose = false) {
   // Unity-specific modifications
   if (verbose) {
     console.log('Applying Unity-specific modifications...');
@@ -155,7 +155,7 @@ function modifyForUnity(gltfData) {
   return gltfData;
 }
 
-function modifyForRoblox(gltfData) {
+function modifyForRoblox(gltfData, verbose = false) {
   // Roblox-specific modifications
   if (verbose) {
     console.log('Applying Roblox-specific modifications...');

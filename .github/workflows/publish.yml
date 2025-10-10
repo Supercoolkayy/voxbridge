@@ -75,6 +75,11 @@ jobs:
             npx pkg . --targets node18-linux-x64 --output ../build/node_binary/voxbridge-node
           fi
           
+          # Also copy the Node.js runner script to the build directory for bundling
+          cp simple_processor.js ../build/node_binary/
+          cp process_complex.js ../build/node_binary/
+          cp validate.js ../build/node_binary/
+          
           cd ..
           
           # Make executable (skip on Windows)

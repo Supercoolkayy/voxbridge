@@ -26,7 +26,7 @@ class OrchestratedConverter:
         self.conversion_stats = {}
         
         # Always use bundled node runner, do not require global Node.js
-        self.node_runner_path = get_resource_path("build/node_binary/voxbridge_node.js")
+        self.node_runner_path = get_resource_path("node_scripts/simple_processor.js")
         if not self.node_runner_path.exists():
             logger.warning("ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner not found!")
         else:
@@ -266,22 +266,43 @@ class OrchestratedConverter:
             # Use standalone Node.js binary (completely self-contained)
             import platform
             if platform.system() == "Windows":
-                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node.exe")
+                # Check multiple possible locations for the Node.js binary
+                possible_paths = [
+                    get_resource_path("build/node_binary/voxbridge-node.exe"),
+                    Path(__file__).parent.parent.parent / "build/node_binary/voxbridge-node.exe",
+                    Path(__file__).parent.parent.parent / "voxbridge-node.exe",
+                    Path.cwd() / "build/node_binary/voxbridge-node.exe",
+                    Path.cwd() / "voxbridge-node.exe"
+                ]
+                standalone_node_path = None
+                for path_candidate in possible_paths:
+                    if path_candidate.exists():
+                        standalone_node_path = path_candidate
+                        break
             else:
-                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node")
+                # Linux/macOS paths
+                possible_paths = [
+                    get_resource_path("build/node_binary/voxbridge-node"),
+                    Path(__file__).parent.parent.parent / "build/node_binary/voxbridge-node",
+                    Path(__file__).parent.parent.parent / "voxbridge-node",
+                    Path.cwd() / "build/node_binary/voxbridge-node",
+                    Path.cwd() / "voxbridge-node"
+                ]
+                standalone_node_path = None
+                for path_candidate in possible_paths:
+                    if path_candidate.exists():
+                        standalone_node_path = path_candidate
+                        break
             
-            # Also check if it's in the same directory as the executable
-            if not standalone_node_path.exists():
-                if platform.system() == "Windows":
-                    standalone_node_path = Path(__file__).parent.parent.parent / "voxbridge-node.exe"
-                else:
-                    standalone_node_path = Path(__file__).parent.parent.parent / "voxbridge-node"
-            
-            if standalone_node_path.exists():
+            if standalone_node_path and standalone_node_path.exists():
                 node_binary = str(standalone_node_path)
+                if self.debug:
+                    print(f"Using Node.js binary: {node_binary}")
             else:
                 # Fallback to system node
                 node_binary = "node"
+                if self.debug:
+                    print(f"Node.js binary not found, using system node: {node_binary}")
             
             cmd = [
                 node_binary, str(node_runner_path), '--input', str(input_path.absolute()),
@@ -290,22 +311,7 @@ class OrchestratedConverter:
                 '--verbose'
             ]
             
-            if options.get('pack_glb', False):
-                cmd.append('--pack-glb')
-            
-            if options.get('use_draco', True):
-                cmd.append('--use-draco')
-            else:
-                cmd.append('--no-draco')
-            
-            if options.get('texture_size'):
-                cmd.extend(['--texture-size', str(options['texture_size'])])
-            
-            if options.get('quantize', True):
-                cmd.append('--quantize')
-            
             if self.debug:
-                cmd.append('--verbose')
                 logger.info(f"Running Node.js command: {' '.join(cmd)}")
             
             # Run Node.js processing
@@ -1053,11 +1059,35 @@ class OrchestratedConverter:
             # Use standalone Node.js binary (completely self-contained)
             import platform
             if platform.system() == "Windows":
-                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node.exe")
+                # Check multiple possible locations for the Node.js binary
+                possible_paths = [
+                    get_resource_path("build/node_binary/voxbridge-node.exe"),
+                    Path(__file__).parent.parent.parent / "build/node_binary/voxbridge-node.exe",
+                    Path(__file__).parent.parent.parent / "voxbridge-node.exe",
+                    Path.cwd() / "build/node_binary/voxbridge-node.exe",
+                    Path.cwd() / "voxbridge-node.exe"
+                ]
+                standalone_node_path = None
+                for path_candidate in possible_paths:
+                    if path_candidate.exists():
+                        standalone_node_path = path_candidate
+                        break
             else:
-                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node")
+                # Linux/macOS paths
+                possible_paths = [
+                    get_resource_path("build/node_binary/voxbridge-node"),
+                    Path(__file__).parent.parent.parent / "build/node_binary/voxbridge-node",
+                    Path(__file__).parent.parent.parent / "voxbridge-node",
+                    Path.cwd() / "build/node_binary/voxbridge-node",
+                    Path.cwd() / "voxbridge-node"
+                ]
+                standalone_node_path = None
+                for path_candidate in possible_paths:
+                    if path_candidate.exists():
+                        standalone_node_path = path_candidate
+                        break
             
-            if standalone_node_path.exists():
+            if standalone_node_path and standalone_node_path.exists():
                 node_binary = str(standalone_node_path)
             else:
                 # Fallback to system node
