@@ -395,6 +395,14 @@ class VoxBridgeGUI:
                                     if 'processing_time' in result:
                                         self.log_message(f"  → Processing time: {result['processing_time']:.1f}s", "info")
                                     
+                                    # Show processing messages (duplicate detection, mesh quality)
+                                    if 'processing_messages' in result:
+                                        for msg in result['processing_messages']:
+                                            # Clean Unicode characters for display
+                                            msg_clean = msg.replace('✓', '[OK]').replace('✅', '[OK]').replace('→', '->').replace('===', '---')
+                                            if any(keyword in msg for keyword in ['duplicate', 'preserved', 'Meshes:', 'Quality:', 'Animations']):
+                                                self.log_message(f"  → {msg_clean}", "success")
+                                    
                                     # Show optimization results if available
                                     if 'optimization_metrics' in result:
                                         metrics = result['optimization_metrics']
