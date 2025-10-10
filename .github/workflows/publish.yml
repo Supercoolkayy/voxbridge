@@ -46,36 +46,16 @@ jobs:
         timeout-minutes: 15
 
       # -----------------------
-      # Bundle Node.js runtime and scripts for standalone operation
-      # This ensures the executable works without requiring Node.js to be installed
+      # Prepare Node.js scripts for bundling
+      # Note: We'll use system Node.js instead of bundling to avoid WinError 193
       # -----------------------
-      - name: Bundle Node.js runtime and scripts
+      - name: Prepare Node.js scripts
         shell: bash
         run: |
           set -e
           mkdir -p build/node_binary
           
-          echo "Bundling Node.js runtime for platform: ${{ matrix.os }}"
-          
-          # Copy the system Node.js binary (it's already available in the runner)
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # On Windows, copy node.exe
-            if command -v node >/dev/null 2>&1; then
-              cp "$(which node)" build/node_binary/node.exe
-              echo "Copied Node.js binary: $(which node) -> build/node_binary/node.exe"
-            else
-              echo "Node not found in PATH, will use system node"
-            fi
-          else
-            # On Linux/macOS, copy node binary
-            if command -v node >/dev/null 2>&1; then
-              cp "$(which node)" build/node_binary/node
-              chmod +x build/node_binary/node
-              echo "Copied Node.js binary: $(which node) -> build/node_binary/node"
-            else
-              echo "Node not found in PATH, will use system node"
-            fi
-          fi
+          echo "Preparing Node.js scripts for platform: ${{ matrix.os }}"
           
           # Copy process_complex.js as the main Node.js runner
           cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
@@ -96,7 +76,7 @@ jobs:
             fi
           fi
           
-          echo "Node.js bundling complete. Files in build/node_binary:"
+          echo "Node.js scripts prepared. Files in build/node_binary:"
           ls -la build/node_binary
 
       # -----------------------
@@ -150,7 +130,6 @@ jobs:
             --name voxbridge${{ matrix.ext }} \
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
-            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
@@ -194,7 +173,6 @@ jobs:
             --name voxbridge-gui${{ matrix.ext }} \
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
-            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
@@ -227,19 +205,12 @@ jobs:
 
           echo "Copying files to release package..."
 
-          # Copy executables
+          # Copy ONLY the two executables (clean package)
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
 
-          # Copy node_scripts with dependencies and the node runtime
-          cp -r node_scripts release/voxbridge/ || true
-          cp -r build/node_binary release/voxbridge/ || true
-
-          # Copy documentation
-          cp README.md release/voxbridge/ 2>/dev/null || echo "README.md not found"
-          cp LICENSE release/voxbridge/ 2>/dev/null || echo "LICENSE not found"
-          cp -r docs release/voxbridge/ 2>/dev/null || echo "docs directory not found"
-          cp -r examples release/voxbridge/ 2>/dev/null || echo "examples directory not found"
+          echo "Clean package created with only executables:"
+          ls -la release/voxbridge/
 
           # List what we have
           echo "Package contents (top 200 files):"

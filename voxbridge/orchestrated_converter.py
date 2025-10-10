@@ -263,19 +263,8 @@ class OrchestratedConverter:
             if not node_runner_path.exists():
                 raise FileNotFoundError(f"Node.js runner not found: {node_runner_path}")
 
-            # Build command arguments using bundled Node.js binary
-            # First try to use bundled Node.js, fallback to system node
-            import platform
-            if platform.system() == "Windows":
-                bundled_node_path = get_resource_path("build/node_binary/node.exe")
-            else:
-                bundled_node_path = get_resource_path("build/node_binary/node")
-            
-            if bundled_node_path.exists():
-                node_binary = str(bundled_node_path)
-            else:
-                # Fallback to system node
-                node_binary = "node"
+            # Use system Node.js (no bundled binary to avoid WinError 193)
+            node_binary = "node"
             
             cmd = [
                 node_binary, str(node_runner_path), 'process',
@@ -307,7 +296,7 @@ class OrchestratedConverter:
                 cmd,
                 capture_output=True,
                 text=True,
-                cwd=node_script.parent
+                cwd=node_runner_path.parent
             )
             
             if process_result.returncode != 0:
@@ -1044,17 +1033,8 @@ class OrchestratedConverter:
         try:
             node_runner_path = get_node_runner_path()
             
-            # Use bundled Node.js binary if available
-            import platform
-            if platform.system() == "Windows":
-                bundled_node_path = get_resource_path("build/node_binary/node.exe")
-            else:
-                bundled_node_path = get_resource_path("build/node_binary/node")
-            
-            if bundled_node_path.exists():
-                node_binary = str(bundled_node_path)
-            else:
-                node_binary = "node"
+            # Use system Node.js (no bundled binary to avoid WinError 193)
+            node_binary = "node"
             
             cmd = [node_binary, str(node_runner_path), 'validate', '--input', output_path]
             
@@ -1062,7 +1042,7 @@ class OrchestratedConverter:
                 cmd,
                 capture_output=True,
                 text=True,
-                cwd=node_script.parent
+                cwd=node_runner_path.parent
             )
             
             if process_result.returncode == 0:
