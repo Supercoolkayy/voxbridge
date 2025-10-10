@@ -263,8 +263,18 @@ class OrchestratedConverter:
             if not node_runner_path.exists():
                 raise FileNotFoundError(f"Node.js runner not found: {node_runner_path}")
 
-            # Use system Node.js (no bundled binary to avoid WinError 193)
-            node_binary = "node"
+            # Use standalone Node.js binary (completely self-contained)
+            import platform
+            if platform.system() == "Windows":
+                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node.exe")
+            else:
+                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node")
+            
+            if standalone_node_path.exists():
+                node_binary = str(standalone_node_path)
+            else:
+                # Fallback to system node
+                node_binary = "node"
             
             cmd = [
                 node_binary, str(node_runner_path), 'process',
@@ -1033,8 +1043,18 @@ class OrchestratedConverter:
         try:
             node_runner_path = get_node_runner_path()
             
-            # Use system Node.js (no bundled binary to avoid WinError 193)
-            node_binary = "node"
+            # Use standalone Node.js binary (completely self-contained)
+            import platform
+            if platform.system() == "Windows":
+                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node.exe")
+            else:
+                standalone_node_path = get_resource_path("build/node_binary/voxbridge-node")
+            
+            if standalone_node_path.exists():
+                node_binary = str(standalone_node_path)
+            else:
+                # Fallback to system node
+                node_binary = "node"
             
             cmd = [node_binary, str(node_runner_path), 'validate', '--input', output_path]
             

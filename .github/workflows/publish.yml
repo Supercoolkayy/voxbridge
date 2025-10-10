@@ -46,37 +46,43 @@ jobs:
         timeout-minutes: 15
 
       # -----------------------
-      # Prepare Node.js scripts for bundling
-      # Note: We'll use system Node.js instead of bundling to avoid WinError 193
+      # Build standalone Node.js binary with all dependencies
+      # This creates a completely standalone Node.js executable
       # -----------------------
-      - name: Prepare Node.js scripts
+      - name: Build standalone Node.js binary
         shell: bash
         run: |
           set -e
           mkdir -p build/node_binary
           
-          echo "Preparing Node.js scripts for platform: ${{ matrix.os }}"
+          echo "Building standalone Node.js binary for platform: ${{ matrix.os }}"
           
-          # Copy process_complex.js as the main Node.js runner
-          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+          # Install pkg globally for building standalone executables
+          npm install -g pkg
           
-          # Make the script executable (skip on Windows)
-          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-            chmod +x build/node_binary/voxbridge_node.js
-          fi
+          # Build the standalone Node.js binary with all dependencies
+          cd node_scripts
           
-          # Convert line endings for platform compatibility
+          # Install all dependencies
+          npm install
+          
+          # Build standalone executable for current platform
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "Using CRLF line endings for Windows"
+            npx pkg . --targets node18-win-x64 --output ../build/node_binary/voxbridge-node.exe
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            npx pkg . --targets node18-macos-x64 --output ../build/node_binary/voxbridge-node
           else
-            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js
-            else
-              sed -i 's/\r$//' build/node_binary/voxbridge_node.js
-            fi
+            npx pkg . --targets node18-linux-x64 --output ../build/node_binary/voxbridge-node
           fi
           
-          echo "Node.js scripts prepared. Files in build/node_binary:"
+          cd ..
+          
+          # Make executable (skip on Windows)
+          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
+            chmod +x build/node_binary/voxbridge-node
+          fi
+          
+          echo "Standalone Node.js binary built. Files in build/node_binary:"
           ls -la build/node_binary
 
       # -----------------------

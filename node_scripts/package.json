@@ -10,7 +10,8 @@
     "process": "node process_complex.js",
     "validate": "node validate.js",
     "roblox-map": "node roblox_map.js",
-    "unity-preset": "node unity_preset.js"
+    "unity-preset": "node unity_preset.js",
+    "build": "pkg . --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --output ../build/node_binary/voxbridge-node"
   },
   "dependencies": {
     "@babel/cli": "^7.28.3",
@@ -20,7 +21,7 @@
     "@gltf-transform/core": "^3.0.0",
     "@gltf-transform/functions": "^3.0.0",
     "adm-zip": "^0.5.16",
-    "commander": "^11.0.0",
+    "commander": "^11.1.0",
     "fs-extra": "^11.0.0",
     "gltf-pipeline": "^3.0.0",
     "meshoptimizer": "^0.25.0"
@@ -39,6 +40,7 @@
   "license": "MIT",
   "devDependencies": {
     "@vercel/ncc": "^0.38.4",
-    "nexe": "^5.0.0-beta.4"
+    "nexe": "^5.0.0-beta.4",
+    "pkg": "^5.8.1"
   }
 }
