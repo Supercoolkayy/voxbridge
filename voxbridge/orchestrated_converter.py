@@ -284,10 +284,10 @@ class OrchestratedConverter:
                 node_binary = "node"
             
             cmd = [
-                node_binary, str(node_runner_path), 'process',
-                '--input', str(input_path.absolute()),
+                node_binary, str(node_runner_path), '--input', str(input_path.absolute()),
                 '--output', str(output_dir.absolute()),
-                '--target', target
+                '--target', target,
+                '--verbose'
             ]
             
             if options.get('pack_glb', False):

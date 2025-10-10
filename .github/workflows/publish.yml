@@ -213,19 +213,11 @@ jobs:
 
           echo "Copying files to release package..."
 
-          # Copy executables and Node.js binary
+          # Copy ONLY the two main executables (clean package)
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
-          
-          # Copy standalone Node.js binary
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cp build/node_binary/voxbridge-node.exe release/voxbridge/ || true
-          else
-            cp build/node_binary/voxbridge-node release/voxbridge/ || true
-            chmod +x release/voxbridge/voxbridge-node || true
-          fi
 
-          echo "Package created with executables and Node.js binary:"
+          echo "Clean package created with only executables:"
           ls -la release/voxbridge/
 
           # List what we have
