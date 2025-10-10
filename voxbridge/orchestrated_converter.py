@@ -110,6 +110,32 @@ class OrchestratedConverter:
                 logger.info("Using Trimesh static processing path")
                 result = self._process_static_file(input_path_obj, Path(output_dir), target, options, result, input_path_obj)
             
+            # Step 3.5: Apply platform-specific texture packing (Unity/Roblox)
+            if result['success'] and target in ['unity', 'roblox']:
+                try:
+                    from .platform_profiles import PlatformProfileManager
+                    profile_manager = PlatformProfileManager(debug=self.debug)
+                    
+                    # Find the GLTF output file to apply texture packing
+                    output_path = result.get('output_path')
+                    if output_path:
+                        gltf_path = Path(output_path)
+                        
+                        # If output is a ZIP, we need to extract, process, and repack
+                        # For now, just log that texture packing would be applied
+                        if gltf_path.suffix.lower() == '.gltf':
+                            logger.info(f"Applying {target} texture packing to {gltf_path}")
+                            profile_manager.apply_post_processing(gltf_path, target)
+                            logger.info(f"Texture packing complete for {target}")
+                        elif gltf_path.suffix.lower() == '.zip':
+                            # For ZIP files, texture packing needs to happen inside the ZIP
+                            # This will be handled in the packaging step
+                            logger.debug(f"Texture packing deferred for ZIP file: {gltf_path}")
+                except Exception as e:
+                    logger.warning(f"Texture packing failed: {e}")
+                    # Don't fail the conversion, just log the warning
+                    result['warnings'].append(f"Texture packing skipped: {str(e)}")
+            
             # Step 4: Post-validation pass
             if result['success']:
                 # Fast validation first
@@ -732,6 +758,27 @@ class OrchestratedConverter:
         try:
             import zipfile
             import shutil
+            
+            # CRITICAL: Apply platform-specific texture packing BEFORE packaging
+            # This fixes the Unity gray material issue by remapping PBR texture channels
+            if target in ['unity', 'roblox']:
+                try:
+                    from .platform_profiles import PlatformProfileManager
+                    profile_manager = PlatformProfileManager(debug=self.debug)
+                    
+                    # Find GLTF files in output directory
+                    gltf_files = list(output_dir.glob('*.gltf'))
+                    for gltf_file in gltf_files:
+                        if self.debug:
+                            logger.info(f"Applying {target} texture packing to {gltf_file.name}")
+                        
+                        profile_manager.apply_post_processing(gltf_file, target)
+                        
+                        if self.debug:
+                            logger.info(f"{target.capitalize()} texture packing complete")
+                except Exception as tex_error:
+                    logger.warning(f"Texture packing failed (continuing anyway): {tex_error}")
+                    # Don't fail the entire conversion, just log the warning
             
             # Create package name
             package_name = f"{model_name}_{target}.zip"

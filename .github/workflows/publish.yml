@@ -153,6 +153,9 @@ jobs:
             --hidden-import voxbridge.platform_profiles \
             --hidden-import voxbridge.converter \
             --hidden-import voxbridge.cli \
+            --hidden-import PIL \
+            --hidden-import PIL.Image \
+            --hidden-import pygltflib \
             --exclude-module matplotlib \
             --exclude-module pandas \
             --exclude-module jupyter \
@@ -199,6 +202,9 @@ jobs:
             --hidden-import voxbridge.converter \
             --hidden-import voxbridge.gui \
             --hidden-import voxbridge.gui.app \
+            --hidden-import PIL \
+            --hidden-import PIL.Image \
+            --hidden-import pygltflib \
             --exclude-module matplotlib \
             --exclude-module pandas \
             --exclude-module jupyter \
