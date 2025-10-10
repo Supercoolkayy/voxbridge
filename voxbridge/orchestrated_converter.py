@@ -12,7 +12,7 @@ import logging
 
 # Import detection and routing modules
 from .utils.detect import is_complex_gltf, get_file_stats
-from .utils.paths import get_node_runner_path, ensure_executable, is_bundled
+from .utils.paths import get_node_runner_path, ensure_executable, is_bundled, get_resource_path
 from .converter import VoxBridgeConverter
 
 logger = logging.getLogger(__name__)
@@ -263,9 +263,22 @@ class OrchestratedConverter:
             if not node_runner_path.exists():
                 raise FileNotFoundError(f"Node.js runner not found: {node_runner_path}")
 
-            # Build command arguments
+            # Build command arguments using bundled Node.js binary
+            # First try to use bundled Node.js, fallback to system node
+            import platform
+            if platform.system() == "Windows":
+                bundled_node_path = get_resource_path("build/node_binary/node.exe")
+            else:
+                bundled_node_path = get_resource_path("build/node_binary/node")
+            
+            if bundled_node_path.exists():
+                node_binary = str(bundled_node_path)
+            else:
+                # Fallback to system node
+                node_binary = "node"
+            
             cmd = [
-                "node", str(node_runner_path), 'process',
+                node_binary, str(node_runner_path), 'process',
                 '--input', str(input_path.absolute()),
                 '--output', str(output_dir.absolute()),
                 '--target', target
@@ -1031,7 +1044,19 @@ class OrchestratedConverter:
         try:
             node_runner_path = get_node_runner_path()
             
-            cmd = [str(node_runner_path), 'validate', '--input', output_path]
+            # Use bundled Node.js binary if available
+            import platform
+            if platform.system() == "Windows":
+                bundled_node_path = get_resource_path("build/node_binary/node.exe")
+            else:
+                bundled_node_path = get_resource_path("build/node_binary/node")
+            
+            if bundled_node_path.exists():
+                node_binary = str(bundled_node_path)
+            else:
+                node_binary = "node"
+            
+            cmd = [node_binary, str(node_runner_path), 'validate', '--input', output_path]
             
             process_result = subprocess.run(
                 cmd,

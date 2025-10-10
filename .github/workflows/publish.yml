@@ -46,62 +46,58 @@ jobs:
         timeout-minutes: 15
 
       # -----------------------
-      # Fetch a Node runtime for bundling (so released package works without system node)
-      # This step downloads a Node binary using npx pkg-fetch and places it into build/node_binary/node
+      # Bundle Node.js runtime and scripts for standalone operation
+      # This ensures the executable works without requiring Node.js to be installed
       # -----------------------
-      - name: Fetch Node runtime for bundling
+      - name: Bundle Node.js runtime and scripts
         shell: bash
         run: |
           set -e
           mkdir -p build/node_binary
-          echo "Fetching Node runtime for platform: ${{ matrix.os }}"
+          
+          echo "Bundling Node.js runtime for platform: ${{ matrix.os }}"
+          
+          # Copy the system Node.js binary (it's already available in the runner)
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            # Windows: download Windows node executable
-            npx pkg-fetch --node-range node18 --platform win --arch x64 --output build/node_binary/node18-win-x64
-            # move or copy to stable name if possible
-            # extracted filename can vary; attempt common locations
-            if [ -f build/node_binary/node-v18.*-win-x64.exe ] 2>/dev/null; then
-              mv build/node_binary/node-v18.*-win-x64.exe build/node_binary/node.exe || true
+            # On Windows, copy node.exe
+            if command -v node >/dev/null 2>&1; then
+              cp "$(which node)" build/node_binary/node.exe
+              echo "Copied Node.js binary: $(which node) -> build/node_binary/node.exe"
+            else
+              echo "Node not found in PATH, will use system node"
             fi
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            npx pkg-fetch --node-range node18 --platform macos --arch x64 --output build/node_binary/node18-macos-x64
-            # move binary to stable name if present
-            find build/node_binary -type f -name "node-v18.*-darwin*" -exec mv {} build/node_binary/node \; || true
-            chmod +x build/node_binary/node || true
           else
-            # linux
-            npx pkg-fetch --node-range node18 --platform linux --arch x64 --output build/node_binary/node18-linux-x64
-            find build/node_binary -type f -name "node-v18.*-linux*" -exec mv {} build/node_binary/node \; || true
-            chmod +x build/node_binary/node || true
+            # On Linux/macOS, copy node binary
+            if command -v node >/dev/null 2>&1; then
+              cp "$(which node)" build/node_binary/node
+              chmod +x build/node_binary/node
+              echo "Copied Node.js binary: $(which node) -> build/node_binary/node"
+            else
+              echo "Node not found in PATH, will use system node"
+            fi
           fi
-          echo "Node runtime fetch step complete. Files in build/node_binary:"
-          ls -la build/node_binary || true
-        timeout-minutes: 10
-
-      - name: Build Node.js binary bundle (copy runner)
-        shell: bash
-        run: |
-          # Create build directory
-          mkdir -p build/node_binary
-
-          # Copy process_complex.js as the main Node.js runner next to the Node runtime
-          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js || true
-
-          # Make executable (skip on Windows but keep it simple)
+          
+          # Copy process_complex.js as the main Node.js runner
+          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+          
+          # Make the script executable (skip on Windows)
           if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-            chmod +x build/node_binary/voxbridge_node.js || true
+            chmod +x build/node_binary/voxbridge_node.js
           fi
-
-          # Convert line endings for platform
+          
+          # Convert line endings for platform compatibility
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             echo "Using CRLF line endings for Windows"
           else
             if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js || true
+              sed -i '' 's/\r$//' build/node_binary/voxbridge_node.js
             else
-              sed -i 's/\r$//' build/node_binary/voxbridge_node.js || true
+              sed -i 's/\r$//' build/node_binary/voxbridge_node.js
             fi
           fi
+          
+          echo "Node.js bundling complete. Files in build/node_binary:"
+          ls -la build/node_binary
 
       # -----------------------
       # Python setup
@@ -155,12 +151,18 @@ jobs:
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
             --add-data "node_scripts${SEP}node_scripts" \
+            --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
             --hidden-import voxbridge.cross_platform \
             --hidden-import voxbridge.error_handler \
+            --hidden-import voxbridge.utils \
             --hidden-import voxbridge.utils.paths \
             --hidden-import voxbridge.utils.detect \
+            --hidden-import voxbridge.texture_optimizer \
+            --hidden-import voxbridge.platform_profiles \
+            --hidden-import voxbridge.converter \
+            --hidden-import voxbridge.cli \
             --exclude-module matplotlib \
             --exclude-module pandas \
             --exclude-module jupyter \
@@ -193,12 +195,18 @@ jobs:
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
             --add-data "node_scripts${SEP}node_scripts" \
+            --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
             --hidden-import voxbridge.cross_platform \
             --hidden-import voxbridge.error_handler \
+            --hidden-import voxbridge.utils \
             --hidden-import voxbridge.utils.paths \
             --hidden-import voxbridge.utils.detect \
+            --hidden-import voxbridge.texture_optimizer \
+            --hidden-import voxbridge.platform_profiles \
+            --hidden-import voxbridge.converter \
+            --hidden-import voxbridge.gui \
             --hidden-import voxbridge.gui.app \
             --exclude-module matplotlib \
             --exclude-module pandas \
