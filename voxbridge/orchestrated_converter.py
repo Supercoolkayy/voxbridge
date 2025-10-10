@@ -270,6 +270,13 @@ class OrchestratedConverter:
             else:
                 standalone_node_path = get_resource_path("build/node_binary/voxbridge-node")
             
+            # Also check if it's in the same directory as the executable
+            if not standalone_node_path.exists():
+                if platform.system() == "Windows":
+                    standalone_node_path = Path(__file__).parent.parent.parent / "voxbridge-node.exe"
+                else:
+                    standalone_node_path = Path(__file__).parent.parent.parent / "voxbridge-node"
+            
             if standalone_node_path.exists():
                 node_binary = str(standalone_node_path)
             else:

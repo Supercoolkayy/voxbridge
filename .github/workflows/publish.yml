@@ -136,6 +136,7 @@ jobs:
             --name voxbridge${{ matrix.ext }} \
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
@@ -179,6 +180,7 @@ jobs:
             --name voxbridge-gui${{ matrix.ext }} \
             --add-data "voxbridge${SEP}voxbridge" \
             --add-data "build/node_binary${SEP}build/node_binary" \
+            --add-data "node_scripts${SEP}node_scripts" \
             --hidden-import voxbridge \
             --hidden-import voxbridge.orchestrated_converter \
             --hidden-import voxbridge.pipeline_runner \
@@ -211,11 +213,19 @@ jobs:
 
           echo "Copying files to release package..."
 
-          # Copy ONLY the two executables (clean package)
+          # Copy executables and Node.js binary
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
+          
+          # Copy standalone Node.js binary
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cp build/node_binary/voxbridge-node.exe release/voxbridge/ || true
+          else
+            cp build/node_binary/voxbridge-node release/voxbridge/ || true
+            chmod +x release/voxbridge/voxbridge-node || true
+          fi
 
-          echo "Clean package created with only executables:"
+          echo "Package created with executables and Node.js binary:"
           ls -la release/voxbridge/
 
           # List what we have
