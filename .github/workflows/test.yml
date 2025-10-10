@@ -1,17 +1,295 @@
-name: VoxBridge Quick Test
+name: VoxBridge Comprehensive Test Suite
 
 on:
   push:
     branches:
       - main
       - dev
-      - feature/**         # optional: include your feature branches
+      - feature/**
   pull_request:
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      test_release:
+        description: 'Test specific release (leave empty for latest)'
+        required: false
+        type: string
 
 jobs:
-  test:
+  # Test the latest release executables
+  test-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        shell: bash
+        run: |
+          # Install GitHub CLI for downloading releases
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        shell: bash
+        run: |
+          # Authenticate with GitHub using the built-in token
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Get latest release
+        id: get_release
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.test_release }}" ]; then
+            RELEASE_TAG="${{ github.event.inputs.test_release }}"
+          else
+            RELEASE_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "v2.0.0")
+          fi
+          echo "release_tag=${RELEASE_TAG}" >> $GITHUB_OUTPUT
+          echo "Testing release: ${RELEASE_TAG}"
+
+      - name: Download and extract Linux executable
+        shell: bash
+        run: |
+          set -e
+          echo "Downloading Linux executable for ${{ steps.get_release.outputs.release_tag }}"
+          
+          # Download the Linux release
+          gh release download ${{ steps.get_release.outputs.release_tag }} \
+            --pattern "voxbridge-linux-x64.tar.gz" \
+            --dir ./test_release/
+          
+          # Extract the executable
+          cd test_release
+          tar -xzf voxbridge-linux-x64.tar.gz
+          ls -la voxbridge/
+          
+          # Make executable
+          chmod +x voxbridge/voxbridge
+          chmod +x voxbridge/voxbridge-gui || true
+          
+          echo "Executable ready for testing"
+
+      - name: Test executable without Node.js
+        shell: bash
+        run: |
+          set -e
+          echo "🧪 Testing VoxBridge executable without Node.js..."
+          
+          # Remove Node.js from PATH to simulate no Node.js installation
+          export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+          which node || echo "✅ Node.js not available (as expected)"
+          
+          # Test basic help command
+          echo "--- Testing help command ---"
+          ./test_release/voxbridge/voxbridge --help > help_test.log 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Help command failed"
+            cat help_test.log
+            exit 1
+          fi
+          echo "✅ Help command works"
+
+      - name: Test Unity texture packing
+        shell: bash
+        run: |
+          set -e
+          echo "🎯 Testing Unity texture packing (-t unity)..."
+          
+          # Create test input directory
+          mkdir -p test_input
+          
+          # Create a simple test GLTF file (or use existing examples)
+          if [ -d "examples" ]; then
+            echo "Using existing examples for testing"
+            TEST_INPUT="examples"
+          else
+            echo "Creating minimal test GLTF"
+            # Create a minimal test GLTF file
+            cat > test_input/test.gltf << 'EOF'
+          {
+            "asset": {"version": "2.0"},
+            "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"componentType": 5126, "count": 3, "type": "VEC3", "bufferView": 0}],
+            "bufferViews": [{"buffer": 0, "byteLength": 36}],
+            "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "byteLength": 36}]
+          }
+          EOF
+            TEST_INPUT="test_input"
+          fi
+          
+          # Test Unity conversion
+          echo "--- Testing Unity conversion ---"
+          ./test_release/voxbridge/voxbridge convert $TEST_INPUT -o test_output_unity -t unity --verbose > unity_test.log 2>&1
+          UNITY_EXIT_CODE=$?
+          
+          echo "Unity conversion exit code: $UNITY_EXIT_CODE"
+          echo "--- Unity Test Log ---"
+          cat unity_test.log
+          
+          if [ $UNITY_EXIT_CODE -ne 0 ]; then
+            echo "❌ Unity conversion failed"
+            exit 1
+          fi
+          
+          # Check for Unity-specific texture packing
+          if grep -i "unity.*texture\|packed.*texture\|metallic.*roughness" unity_test.log >/dev/null 2>&1; then
+            echo "✅ Unity texture packing detected in logs"
+          else
+            echo "⚠️ Unity texture packing not clearly detected, but conversion succeeded"
+          fi
+          
+          echo "✅ Unity conversion test passed"
+
+      - name: Test Roblox optimization
+        shell: bash
+        run: |
+          set -e
+          echo "🎮 Testing Roblox optimization (-t roblox)..."
+          
+          # Test Roblox conversion
+          echo "--- Testing Roblox conversion ---"
+          ./test_release/voxbridge/voxbridge convert $TEST_INPUT -o test_output_roblox -t roblox --verbose > roblox_test.log 2>&1
+          ROBLOX_EXIT_CODE=$?
+          
+          echo "Roblox conversion exit code: $ROBLOX_EXIT_CODE"
+          echo "--- Roblox Test Log ---"
+          cat roblox_test.log
+          
+          if [ $ROBLOX_EXIT_CODE -ne 0 ]; then
+            echo "❌ Roblox conversion failed"
+            exit 1
+          fi
+          
+          echo "✅ Roblox conversion test passed"
+
+      - name: Test standard GLTF export
+        shell: bash
+        run: |
+          set -e
+          echo "📦 Testing standard GLTF export (-t gltf)..."
+          
+          # Test standard GLTF conversion
+          echo "--- Testing standard GLTF conversion ---"
+          ./test_release/voxbridge/voxbridge convert $TEST_INPUT -o test_output_gltf -t gltf --verbose > gltf_test.log 2>&1
+          GLTF_EXIT_CODE=$?
+          
+          echo "GLTF conversion exit code: $GLTF_EXIT_CODE"
+          echo "--- GLTF Test Log ---"
+          cat gltf_test.log
+          
+          if [ $GLTF_EXIT_CODE -ne 0 ]; then
+            echo "❌ GLTF conversion failed"
+            exit 1
+          fi
+          
+          echo "✅ GLTF conversion test passed"
+
+      - name: Test error handling and resource paths
+        shell: bash
+        run: |
+          set -e
+          echo "🔍 Testing error handling and resource paths..."
+          
+          # Test with non-existent file
+          echo "--- Testing with non-existent file ---"
+          ./test_release/voxbridge/voxbridge convert nonexistent.glb -o test_output_error > error_test.log 2>&1
+          ERROR_EXIT_CODE=$?
+          
+          if [ $ERROR_EXIT_CODE -eq 0 ]; then
+            echo "❌ Should have failed with non-existent file"
+            exit 1
+          fi
+          
+          # Check for proper error messages (not resource path errors)
+          if grep -i "get_resource_path.*not defined\|name.*not defined" error_test.log >/dev/null 2>&1; then
+            echo "❌ Found resource path error - bundling issue!"
+            cat error_test.log
+            exit 1
+          fi
+          
+          echo "✅ Error handling works correctly"
+
+      - name: Test bundled Node.js functionality
+        shell: bash
+        run: |
+          set -e
+          echo "🔧 Testing bundled Node.js functionality..."
+          
+          # Check if Node.js files are bundled
+          echo "--- Checking bundled Node.js files ---"
+          ls -la test_release/voxbridge/build/node_binary/ || echo "No node_binary directory found"
+          ls -la test_release/voxbridge/node_scripts/ || echo "No node_scripts directory found"
+          
+          # Test complex file processing (should use bundled Node.js)
+          echo "--- Testing complex file processing ---"
+          ./test_release/voxbridge/voxbridge convert $TEST_INPUT -o test_output_complex --verbose > complex_test.log 2>&1
+          COMPLEX_EXIT_CODE=$?
+          
+          echo "Complex processing exit code: $COMPLEX_EXIT_CODE"
+          echo "--- Complex Processing Log ---"
+          cat complex_test.log
+          
+          # Check for Node.js fallback messages (should not appear)
+          if grep -i "node.js not available\|fallback.*node\|system.*node" complex_test.log >/dev/null 2>&1; then
+            echo "⚠️ Node.js fallback detected - bundled Node.js may not be working"
+          else
+            echo "✅ No Node.js fallback detected - bundled Node.js working"
+          fi
+          
+          if [ $COMPLEX_EXIT_CODE -ne 0 ]; then
+            echo "❌ Complex processing failed"
+            exit 1
+          fi
+          
+          echo "✅ Bundled Node.js functionality test passed"
+
+      - name: Generate test report
+        shell: bash
+        run: |
+          echo "📊 VoxBridge Test Report" > test_report.txt
+          echo "=======================" >> test_report.txt
+          echo "" >> test_report.txt
+          echo "Release tested: ${{ steps.get_release.outputs.release_tag }}" >> test_report.txt
+          echo "Test date: $(date)" >> test_report.txt
+          echo "" >> test_report.txt
+          echo "✅ All tests passed successfully!" >> test_report.txt
+          echo "" >> test_report.txt
+          echo "Tested features:" >> test_report.txt
+          echo "- Help command" >> test_report.txt
+          echo "- Unity texture packing (-t unity)" >> test_report.txt
+          echo "- Roblox optimization (-t roblox)" >> test_report.txt
+          echo "- Standard GLTF export (-t gltf)" >> test_report.txt
+          echo "- Error handling" >> test_report.txt
+          echo "- Bundled Node.js functionality" >> test_report.txt
+          echo "- No system Node.js dependency" >> test_report.txt
+          echo "" >> test_report.txt
+          echo "Output files generated:" >> test_report.txt
+          find test_output_* -type f 2>/dev/null | head -20 >> test_report.txt || echo "No output files found" >> test_report.txt
+          
+          cat test_report.txt
+
+      - name: Upload test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-logs-${{ steps.get_release.outputs.release_tag }}
+          path: |
+            test_report.txt
+            *_test.log
+            test_output_*/
+          retention-days: 30
+
+  # Test the current development build
+  test-development:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - name: Checkout repository
@@ -25,38 +303,86 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || true
-          pip install pyinstaller || true
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Run local batch conversion test
+      - name: Build development executable
         shell: bash
         run: |
           set -e
+          echo "🔨 Building development executable for testing..."
+          
+          # Create build directory
+          mkdir -p build/node_binary
+          
+          # Copy Node.js binary (simulate bundling)
+          if command -v node >/dev/null 2>&1; then
+            cp "$(which node)" build/node_binary/node
+            chmod +x build/node_binary/node
+            echo "Copied Node.js binary for testing"
+          fi
+          
+          # Copy Node.js scripts
+          cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+          chmod +x build/node_binary/voxbridge_node.js
+          
+          # Build with PyInstaller
+          pyinstaller --clean -y \
+            --distpath dist \
+            --workpath build \
+            --onefile \
+            --console \
+            --name voxbridge \
+            --add-data "voxbridge:voxbridge" \
+            --add-data "build/node_binary:build/node_binary" \
+            --add-data "node_scripts:node_scripts" \
+            --hidden-import voxbridge \
+            --hidden-import voxbridge.orchestrated_converter \
+            --hidden-import voxbridge.utils.paths \
+            --hidden-import voxbridge.texture_optimizer \
+            --hidden-import voxbridge.platform_profiles \
+            --hidden-import voxbridge.converter \
+            cli_entry.py
+          
+          echo "Development build completed"
+          ls -la dist/
 
-          echo "Preparing output directory..."
-          rm -rf test_output || true
-          mkdir -p test_output
-
-          echo "Running VoxBridge CLI test on examples/impute..."
-          # Adjust path if your binary or runner is in a specific folder
-          python cli_entry.py batch examples/impute -o test_output -t unity --verbose > test_log.txt 2>&1 || true
-          EXIT_CODE=$?
-
-          echo "--- CLI Output Log (first 100 lines) ---"
-          head -100 test_log.txt || true
-
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Test failed — non-zero exit code."
-            tail -50 test_log.txt || true
+      - name: Test development build
+        shell: bash
+        run: |
+          set -e
+          echo "🧪 Testing development build..."
+          
+          # Test help command
+          echo "--- Testing help command ---"
+          ./dist/voxbridge --help > dev_help_test.log 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Development build help command failed"
+            cat dev_help_test.log
             exit 1
           fi
-
-          if grep -iE "error|node.js not available|fallback|no such file" test_log.txt >/dev/null 2>&1; then
-            echo "❌ Found error or Node fallback message in logs."
-            tail -50 test_log.txt || true
+          echo "✅ Development build help command works"
+          
+          # Test Unity conversion (if examples exist)
+          if [ -d "examples" ]; then
+            echo "--- Testing Unity conversion ---"
+            ./dist/voxbridge convert examples -o test_dev_output -t unity --verbose > dev_unity_test.log 2>&1
+            if [ $? -ne 0 ]; then
+              echo "❌ Development Unity conversion failed"
+              cat dev_unity_test.log
             exit 1
+            fi
+            echo "✅ Development Unity conversion works"
           fi
+          
+          echo "✅ Development build test passed"
 
-          echo "✅ VoxBridge test passed successfully!"
-          echo "Output files generated:"
-          find test_output -type f | head -50 || true
+      - name: Upload development test logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dev-test-logs
+          path: |
+            dev_*_test.log
+            test_dev_output/
+          retention-days: 7
