@@ -7,7 +7,7 @@ on:
       - dev
       - feature/**
   pull_request:
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:  # Allow manual triggering 
     inputs:
       test_release:
         description: 'Test specific release (leave empty for latest)'
