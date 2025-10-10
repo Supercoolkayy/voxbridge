@@ -75,10 +75,9 @@ jobs:
             npx pkg . --targets node18-linux-x64 --output ../build/node_binary/voxbridge-node
           fi
           
-          # Also copy the Node.js runner script to the build directory for bundling
-          cp simple_processor.js ../build/node_binary/
-          cp process_complex.js ../build/node_binary/
-          cp validate.js ../build/node_binary/
+          # Copy ALL Node.js scripts to build directory for proper bundling
+          cp *.js ../build/node_binary/
+          cp package.json ../build/node_binary/
           
           cd ..
           
@@ -158,6 +157,7 @@ jobs:
             --exclude-module pandas \
             --exclude-module jupyter \
             --exclude-module IPython \
+            --collect-all voxbridge \
             cli_entry.py
 
           echo "CLI build completed"
@@ -203,6 +203,7 @@ jobs:
             --exclude-module pandas \
             --exclude-module jupyter \
             --exclude-module IPython \
+            --collect-all voxbridge \
             gui_entry.py
 
           echo "GUI build completed"
