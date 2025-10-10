@@ -50,11 +50,11 @@ def print_fancy_header(verbose: bool = False):
         if verbose:
             # Beautiful verbose header
             header_panel = Panel.fit(
-                "[bold bright_blue]VoxBridge Converter v2.0.0 - Next Generation 3D Processing[/bold bright_blue]\n\n"
+                "[bold bright_blue]VoxBridge Converter v2.0.1 - Next Generation 3D Processing[/bold bright_blue]\n\n"
                 "[cyan]Advanced GLB ➜ GLTF / Roblox / Unity Exporter[/cyan]\n"
                 "[dim]Smart Detection • Lightning Fast • Beautiful Output[/dim]\n"
                 "[dim]Auto-Routing • Comprehensive Reports • Optimized Performance[/dim]",
-                title="[bold white]VoxBridge v2.0.0[/bold white]",
+                title="[bold white]VoxBridge v2.0.1[/bold white]",
                 border_style="bright_blue",
                 padding=(1, 2)
             )
@@ -62,12 +62,12 @@ def print_fancy_header(verbose: bool = False):
         else:
             # Compact version for non-verbose mode
             console.print(Panel.fit(
-                "[bold bright_blue]VoxBridge Converter v2.0.0[/bold bright_blue]\n"
+                "[bold bright_blue]VoxBridge Converter v2.0.1[/bold bright_blue]\n"
                 "[dim]Advanced 3D Model Processing Pipeline[/dim]",
                 border_style="bright_blue"
             ))
     else:
-        print("VoxBridge Converter v2.0.0 - Next Generation 3D Processing")
+        print("VoxBridge Converter v2.0.1 - Next Generation 3D Processing")
         if verbose:
             print("Advanced GLB ➜ GLTF / Roblox / Unity Exporter")
 
@@ -489,6 +489,15 @@ def convert(
             if result.get('fallback_used'):
                 console.print("[yellow]Note: Fallback processing was used[/yellow]")
             
+            # Show processing messages from Node.js (mesh optimization, duplicate detection)
+            if result.get('processing_messages'):
+                console.print("\n[bold cyan]Processing Details:[/bold cyan]")
+                for msg in result['processing_messages']:
+                    # Remove ALL Unicode characters for Windows compatibility
+                    msg_clean = msg.replace('✓', '[OK]').replace('✅', '[OK]').replace('→', '->').replace('⚠', '[!]')
+                    console.print(f"  {msg_clean}")
+                console.print("")
+            
             # Only show detailed information in debug mode
             if debug:
                 # Show warnings with severity differentiation
@@ -500,12 +509,12 @@ def convert(
                     if critical_warnings:
                         console.print(f"[red]Critical Issues: {len(critical_warnings)}[/red]")
                         for warning in critical_warnings:
-                            console.print(f"  [red]⚠ {warning}[/red]")
+                            console.print(f"  [red]ERROR: {warning}[/red]")
                     
                     if advisory_warnings:
                         console.print(f"[yellow]Advisory Warnings: {len(advisory_warnings)}[/yellow]")
                         for warning in advisory_warnings:
-                            console.print(f"  [yellow]⚠ {warning}[/yellow]")
+                            console.print(f"  [yellow]WARNING: {warning}[/yellow]")
                 
                 # Show post-validation results
                 if 'post_validation' in result:
@@ -853,6 +862,85 @@ def selftest():
         return
     
     console.print("\n[bold green]✅ All tests passed! VoxBridge is ready.[/bold green]")
+
+@app.command("debug")
+def debug_bundling():
+    """Debug PyInstaller bundling and file paths"""
+    import sys
+    import os
+    from pathlib import Path
+    
+    print("=== PyInstaller Bundling Debug ===")
+    print(f"Python executable: {sys.executable}")
+    print(f"Current working directory: {os.getcwd()}")
+    
+    # Check if we're running from PyInstaller
+    if getattr(sys, 'frozen', False):
+        print("Running from PyInstaller bundle")
+        bundle_dir = Path(sys._MEIPASS)
+        print(f"Bundle directory: {bundle_dir}")
+        
+        print("\n=== Files in bundle ===")
+        for root, dirs, files in os.walk(bundle_dir):
+            for file in files:
+                file_path = Path(root) / file
+                relative_path = file_path.relative_to(bundle_dir)
+                print(f"  {relative_path}")
+        
+        print("\n=== Looking for Node.js components ===")
+        
+        # Check for Node.js binary
+        node_binary_paths = [
+            bundle_dir / "build/node_binary/voxbridge-node.exe",
+            bundle_dir / "build/node_binary/voxbridge-node",
+            bundle_dir / "voxbridge-node.exe",
+            bundle_dir / "voxbridge-node"
+        ]
+        
+        for path in node_binary_paths:
+            if path.exists():
+                print(f"Node.js binary found: {path}")
+                print(f"  Size: {path.stat().st_size} bytes")
+            else:
+                print(f"Node.js binary NOT found: {path}")
+        
+        # Check for Node.js scripts
+        script_paths = [
+            bundle_dir / "node_scripts/simple_processor.js",
+            bundle_dir / "node_scripts/process_complex.js",
+            bundle_dir / "build/node_binary/simple_processor.js",
+            bundle_dir / "simple_processor.js"
+        ]
+        
+        for path in script_paths:
+            if path.exists():
+                print(f"Node.js script found: {path}")
+                print(f"  Size: {path.stat().st_size} bytes")
+            else:
+                print(f"Node.js script NOT found: {path}")
+        
+        # Test voxbridge.utils.paths
+        try:
+            from .utils.paths import get_resource_path
+            print(f"\n=== Testing get_resource_path ===")
+            
+            test_paths = [
+                "build/node_binary/voxbridge-node.exe",
+                "node_scripts/simple_processor.js",
+                "voxbridge-node.exe",
+                "simple_processor.js"
+            ]
+            
+            for test_path in test_paths:
+                resource_path = get_resource_path(test_path)
+                print(f"get_resource_path('{test_path}') = {resource_path}")
+                print(f"  Exists: {resource_path.exists()}")
+                
+        except Exception as e:
+            print(f"Error testing get_resource_path: {e}")
+    
+    else:
+        print("Running from source (not PyInstaller)")
 
 def main():
     """Main entry point for the CLI."""

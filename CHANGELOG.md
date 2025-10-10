@@ -5,6 +5,46 @@ All notable changes to VoxBridge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-10-10
+
+### 🎉 Production-Ready Release
+
+#### Fixed
+- **Complete Animated Model Support**: Node.js processor now properly extracts and bundles all GLB assets
+  - Binary data (geometry, animations) correctly written to separate `.bin` files
+  - All textures extracted and included in output
+  - Fixed critical bug where only JSON structure was being exported (incomplete GLTF)
+- **Official GLTF Transform Library**: Switched to `@gltf-transform/core` for industry-standard processing
+  - Handles all GLTF extensions (PBR Specular-Glossiness, etc.)
+  - NO native dependencies (sharp removed)
+  - Perfect compatibility with `pkg` bundling
+- **Clean ZIP Output**: Fixed duplicate GLTF file issue
+  - Only one GLTF file per conversion
+  - Proper file structure: GLTF + BIN + textures + report
+- **Unicode Display Issues**: Replaced all Unicode characters with ASCII for Windows compatibility
+  - Fixed `charmap` codec errors on Windows console
+  - Client-friendly messages using `[OK]` instead of `✓`
+
+#### Added
+- **Client-Friendly Status Messages**: Users now see reassuring processing details
+  - "No duplicate meshes found - model is clean"
+  - "Animations preserved: X"
+  - "Meshes: X -> X" (showing no unwanted duplication)
+  - "Quality: Original (High Quality)"
+  - "Textures preserved: X"
+- **Debug Command**: Added `voxbridge debug` command to diagnose bundling issues
+- **Missing `node_available` Property**: Added to OrchestratedConverter class
+
+#### Improved
+- **Error Handling**: Better subprocess error handling with UTF-8 encoding
+- **Extension Support**: Registered `KHR_materials_pbrSpecularGlossiness` for wider compatibility
+- **Packaging Logic**: Improved file filtering to avoid duplicate inclusions
+
+### 📦 Build System
+- Node.js binary now bundles correctly with all dependencies
+- PyInstaller configuration optimized for faster builds
+- Clean release packages with only essential files
+
 ## [2.0.0] - 2025-01-10
 
 ### 🎉 Major Features

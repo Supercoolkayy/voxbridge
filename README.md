@@ -4,7 +4,16 @@
 
 VoxBridge is a professional tool that converts 3D models exported from The Sandbox VoxEdit into optimized formats for Unity and Roblox game engines. It automatically handles mesh optimization, texture processing, and **platform-specific material conversion** to ensure your models work perfectly in your target platform.
 
-## 🎉 What's New in Version 2.0
+## 🎉 What's New in Version 2.0.1
+
+### ✅ Production-Ready Animated Model Support
+- **Official GLTF Transform Library**: Now using `@gltf-transform/core` for bulletproof GLTF processing
+- **Perfect Animation Preservation**: All animations, skins, and rigging fully preserved
+- **Complete Asset Bundling**: Binary data, textures, and geometry all included
+- **No Native Dependencies**: Pure JavaScript Node.js processing bundles perfectly
+- **Client-Friendly Messages**: Shows duplicate detection, mesh quality, and optimization status
+
+### Previous Features (Version 2.0)
 
 ### Platform-Specific Texture Packing (Fixes Gray Materials in Unity!)
 

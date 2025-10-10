@@ -32,6 +32,11 @@ class OrchestratedConverter:
         else:
             logger.info("ℹ️ Using built-in Node.js processing (no system Node required).")
     
+    @property
+    def node_available(self) -> bool:
+        """Check if Node.js processing is available"""
+        return self.node_runner_path.exists()
+    
     def convert_file(self, input_path: Path, output_dir: Path, target: str, 
                     options: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -91,11 +96,14 @@ class OrchestratedConverter:
             
             # Step 3: Route to appropriate converter
             if use_complex_path:
+                if self.debug:
+                    logger.info(f"DEBUG: Checking node_runner_path: {self.node_runner_path}")
+                    logger.info(f"DEBUG: node_runner_path.exists(): {self.node_runner_path.exists()}")
                 if self.node_runner_path.exists():
                     logger.info("Using built-in Node.js complex processing path")
                     result = self._process_complex_file(input_path_obj, Path(output_dir), target, options, result, input_path_obj)
                 else:
-                    logger.warning("ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner not found, falling back to static processing.")
+                    logger.warning(f"ℹ️ Using built-in Node.js processing (no system Node required). Bundled node runner not found at: {self.node_runner_path}, falling back to static processing.")
                     result['fallback_used'] = True
                     result = self._process_static_file(input_path_obj, Path(output_dir), target, options, result, input_path_obj)
             else:
@@ -311,6 +319,10 @@ class OrchestratedConverter:
                 '--verbose'
             ]
             
+            # Add optimization flags if requested
+            if options.get('optimize_mesh', False):
+                cmd.append('--optimize-mesh')
+            
             if self.debug:
                 logger.info(f"Running Node.js command: {' '.join(cmd)}")
             
@@ -319,6 +331,8 @@ class OrchestratedConverter:
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',  # Replace invalid characters instead of failing
                 cwd=node_runner_path.parent
             )
             
@@ -329,6 +343,18 @@ class OrchestratedConverter:
                 result['error'] = error_msg
                 result['fallback_used'] = True
                 return result
+            
+            # Capture Node.js processing messages (mesh optimization, duplicate detection)
+            if process_result.stdout:
+                stdout_lines = process_result.stdout.strip().split('\n')
+                processing_messages = []
+                for line in stdout_lines:
+                    # Capture important status messages
+                    if any(keyword in line for keyword in ['✓', 'duplicate', 'preserved', 'Animations', 'Meshes', 'Quality', 'PROCESSING SUMMARY']):
+                        processing_messages.append(line.strip())
+                
+                if processing_messages:
+                    result['processing_messages'] = processing_messages
             
             # Parse Node.js output for stats
             try:
@@ -386,7 +412,7 @@ class OrchestratedConverter:
                 else:
                     result['success'] = False
                     result['error'] = "No output file generated"
-                result['fallback_used'] = True
+                    result['fallback_used'] = True
             
             return result
             
@@ -778,16 +804,22 @@ class OrchestratedConverter:
                         package_info['total_size'] += Path(output_path).stat().st_size
                 
                 # Add any additional files in output directory with clean structure
+                # Skip GLTF/GLB files as they're already added above
                 for file_path in output_dir.iterdir():
-                    if file_path.is_file() and file_path != package_path:
+                    if file_path.is_file() and file_path != package_path and file_path != Path(output_path):
+                        # Skip GLTF and GLB files - they're already added
+                        if file_path.suffix.lower() in ['.gltf', '.glb']:
+                            continue
+                        
                         if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg']:
                             zip_path = f'textures/{file_path.name}'
                         elif file_path.suffix.lower() == '.bin' and model_name in file_path.name:
                             zip_path = f'{model_name}_{target}.bin'
-                        elif file_path.name == 'voxbridge_report.json':
+                        elif file_path.name == 'voxbridge_report.json' or file_path.name == 'report.json':
                             zip_path = 'report.json'
                         else:
-                            zip_path = file_path.name
+                            # Skip other unknown files
+                            continue
                         
                         zip_file.write(file_path, zip_path)
                         package_info['files'].append(zip_path)
