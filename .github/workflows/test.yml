@@ -104,71 +104,27 @@ jobs:
           
           # Always create a proper test GLTF file
           echo "Creating test GLTF file..."
-          cat > test_input/test.gltf << 'EOF'
-{
-  "asset": {
-    "version": "2.0",
-    "generator": "VoxBridge Test"
-  },
-  "scene": 0,
-  "scenes": [
-    {
-      "nodes": [0]
-    }
-  ],
-  "nodes": [
-    {
-      "mesh": 0
-    }
-  ],
-  "meshes": [
-    {
-      "primitives": [
-        {
-          "attributes": {
-            "POSITION": 0
-          },
-          "indices": 1
-        }
-      ]
-    }
-  ],
-  "accessors": [
-    {
-      "componentType": 5126,
-      "count": 3,
-      "type": "VEC3",
-      "bufferView": 0,
-      "min": [-1, -1, -1],
-      "max": [1, 1, 1]
-    },
-    {
-      "componentType": 5123,
-      "count": 3,
-      "type": "SCALAR",
-      "bufferView": 1
-    }
-  ],
-  "bufferViews": [
-    {
-      "buffer": 0,
-      "byteOffset": 0,
-      "byteLength": 36
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 36,
-      "byteLength": 6
-    }
-  ],
-  "buffers": [
-    {
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-      "byteLength": 42
-    }
-  ]
+          python3 -c "
+import json
+gltf_data = {
+    'asset': {'version': '2.0', 'generator': 'VoxBridge Test'},
+    'scene': 0,
+    'scenes': [{'nodes': [0]}],
+    'nodes': [{'mesh': 0}],
+    'meshes': [{'primitives': [{'attributes': {'POSITION': 0}, 'indices': 1}]}],
+    'accessors': [
+        {'componentType': 5126, 'count': 3, 'type': 'VEC3', 'bufferView': 0, 'min': [-1, -1, -1], 'max': [1, 1, 1]},
+        {'componentType': 5123, 'count': 3, 'type': 'SCALAR', 'bufferView': 1}
+    ],
+    'bufferViews': [
+        {'buffer': 0, 'byteOffset': 0, 'byteLength': 36},
+        {'buffer': 0, 'byteOffset': 36, 'byteLength': 6}
+    ],
+    'buffers': [{'uri': 'data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'byteLength': 42}]
 }
-EOF
+with open('test_input/test.gltf', 'w') as f:
+    json.dump(gltf_data, f, indent=2)
+"
           
           echo "Test GLTF file created:"
           cat test_input/test.gltf
@@ -461,71 +417,27 @@ EOF
           # Test Unity conversion with minimal test file
           echo "--- Testing Unity conversion ---"
           mkdir -p test_dev_input
-          cat > test_dev_input/test.gltf << 'EOF'
-{
-  "asset": {
-    "version": "2.0",
-    "generator": "VoxBridge Test"
-  },
-  "scene": 0,
-  "scenes": [
-    {
-      "nodes": [0]
-    }
-  ],
-  "nodes": [
-    {
-      "mesh": 0
-    }
-  ],
-  "meshes": [
-    {
-      "primitives": [
-        {
-          "attributes": {
-            "POSITION": 0
-          },
-          "indices": 1
-        }
-      ]
-    }
-  ],
-  "accessors": [
-    {
-      "componentType": 5126,
-      "count": 3,
-      "type": "VEC3",
-      "bufferView": 0,
-      "min": [-1, -1, -1],
-      "max": [1, 1, 1]
-    },
-    {
-      "componentType": 5123,
-      "count": 3,
-      "type": "SCALAR",
-      "bufferView": 1
-    }
-  ],
-  "bufferViews": [
-    {
-      "buffer": 0,
-      "byteOffset": 0,
-      "byteLength": 36
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 36,
-      "byteLength": 6
-    }
-  ],
-  "buffers": [
-    {
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-      "byteLength": 42
-    }
-  ]
+          python3 -c "
+import json
+gltf_data = {
+    'asset': {'version': '2.0', 'generator': 'VoxBridge Test'},
+    'scene': 0,
+    'scenes': [{'nodes': [0]}],
+    'nodes': [{'mesh': 0}],
+    'meshes': [{'primitives': [{'attributes': {'POSITION': 0}, 'indices': 1}]}],
+    'accessors': [
+        {'componentType': 5126, 'count': 3, 'type': 'VEC3', 'bufferView': 0, 'min': [-1, -1, -1], 'max': [1, 1, 1]},
+        {'componentType': 5123, 'count': 3, 'type': 'SCALAR', 'bufferView': 1}
+    ],
+    'bufferViews': [
+        {'buffer': 0, 'byteOffset': 0, 'byteLength': 36},
+        {'buffer': 0, 'byteOffset': 36, 'byteLength': 6}
+    ],
+    'buffers': [{'uri': 'data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'byteLength': 42}]
 }
-EOF
+with open('test_dev_input/test.gltf', 'w') as f:
+    json.dump(gltf_data, f, indent=2)
+"
           
           ./dist/voxbridge convert test_dev_input/test.gltf -o test_dev_output -t unity --verbose > dev_unity_test.log 2>&1
           DEV_UNITY_EXIT_CODE=$?
