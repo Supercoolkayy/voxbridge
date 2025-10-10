@@ -1,0 +1,77 @@
+name: VoxBridge Batch Conversion Tests
+
+on:
+  workflow_run:
+    workflows: ["Publish VoxBridge"]
+    types:
+      - completed
+
+jobs:
+  batch-test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Built Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Extract VoxBridge Binary
+        run: |
+          echo "Extracting voxbridge-linux-x64 binary..."
+          mkdir -p ./voxbridge-bin
+          tar -xzf ./artifacts/voxbridge-ubuntu-latest/voxbridge-linux-x64.tar.gz -C ./voxbridge-bin
+          chmod +x ./voxbridge-bin/voxbridge-linux-x64
+          echo "✅ VoxBridge binary extracted successfully."
+
+      - name: Verify Input Directory Exists
+        run: |
+          echo "Checking input directory..."
+          if [ ! -d "./examples/input" ]; then
+            echo "❌ Input directory not found at ./examples/input"
+            exit 1
+          fi
+          echo "✅ Input directory found:"
+          ls -R ./examples/input
+
+      - name: Run VoxBridge Batch Conversion
+        run: |
+          echo "Starting batch conversion..."
+          set -e
+          ./voxbridge-bin/voxbridge-linux-x64 batch ./examples/input \
+            --output-dir ./examples/output \
+            --target unity \
+            --no-blender \
+            --verbose
+          echo "✅ Batch conversion completed."
+
+      - name: Validate Expected Results
+        run: |
+          echo "Verifying batch results..."
+          ls -R ./examples/output || echo "⚠️ No output files found!"
+
+          # Check that 'beautiful_asian_girl.glb' failed as expected
+          if [ -f "./examples/output/beautiful_asian_girl.glb" ]; then
+            echo "❌ ERROR: 'beautiful_asian_girl.glb' was expected to fail but was found in output."
+            exit 1
+          else
+            echo "✅ Expected failure validated for 'beautiful_asian_girl.glb'."
+          fi
+
+          # Optionally check for success on other files
+          success_count=$(find ./examples/output -type f -name "*.zip" | wc -l)
+          if [ "$success_count" -eq 0 ]; then
+            echo "❌ No successful conversions detected."
+            exit 1
+          fi
+          echo "✅ Found $success_count successful conversion(s)."
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxbridge-batch-test-output
+          path: ./examples/output
