@@ -66,15 +66,22 @@ def find_executable():
     return None
 
 def create_test_gltf():
-    """Create a minimal test GLTF file"""
+    """Create a proper test GLTF file"""
     test_gltf = {
-        "asset": {"version": "2.0"},
+        "asset": {"version": "2.0", "generator": "VoxBridge Test"},
+        "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": [{"mesh": 0}],
-        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
-        "accessors": [{"componentType": 5126, "count": 3, "type": "VEC3", "bufferView": 0}],
-        "bufferViews": [{"buffer": 0, "byteLength": 36}],
-        "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "byteLength": 36}]
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+        "accessors": [
+            {"componentType": 5126, "count": 3, "type": "VEC3", "bufferView": 0, "min": [-1, -1, -1], "max": [1, 1, 1]},
+            {"componentType": 5123, "count": 3, "type": "SCALAR", "bufferView": 1}
+        ],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+            {"buffer": 0, "byteOffset": 36, "byteLength": 6}
+        ],
+        "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "byteLength": 42}]
     }
     
     import json
