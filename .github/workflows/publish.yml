@@ -269,14 +269,95 @@ jobs:
         shell: bash
         run: |
           echo "Final artifacts created on this runner:"
-          ls -la voxbridge-*.* || echo "No artifacts found
-          
+          ls -la voxbridge-*.* || echo "No artifacts found"
+
+  # -----------------------
+  # TEST job (runs on ubuntu-latest)
+  # This extracts the Linux artifact, runs the packaged CLI against examples/input,
+  # and ensures there is no 'Node.js not available' fallback in the logs.
+  # -----------------------
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Find linux archive
+        shell: bash
+        run: |
+          set -e
+          mkdir -p /tmp/voxbridge-test
+          # Find any linux tar.gz produced by build matrix
+          ARCHIVE="$(find ./artifacts -type f -name '*linux*.tar.gz' -print -quit || true)"
+          if [[ -z "$ARCHIVE" ]]; then
+            echo "No linux tar.gz found in artifacts. Listing artifacts folder:"
+            ls -R ./artifacts || true
+            echo "Attempting to find any tar.gz"
+            ARCHIVE="$(find ./artifacts -type f -name '*.tar.gz' -print -quit || true)"
+          fi
+          if [[ -z "$ARCHIVE" ]]; then
+            echo "ERROR: No tar.gz artifact found to test. Exiting with failure."
+            exit 1
+          fi
+          echo "Using archive: $ARCHIVE"
+          tar -xzf "$ARCHIVE" -C /tmp/voxbridge-test || (echo "Failed to extract archive" && exit 1)
+          echo "Extraction complete. Directory contents:"
+          ls -la /tmp/voxbridge-test || true
+
+      - name: Run batch conversion test (Linux executable)
+        shell: bash
+        env:
+          PATH: "/tmp/voxbridge-test/voxbridge:${PATH}"
+        run: |
+          set -e
+          # Find the executable inside extracted archive (voxbridge/voxbridge)
+          EXEC="$(find /tmp/voxbridge-test -type f -name 'voxbridge' -print -quit || true)"
+          if [[ -z "$EXEC" ]]; then
+            echo "ERROR: voxbridge executable not found inside archive."
+            exit 1
+          fi
+          echo "Found executable: $EXEC"
+          chmod +x "$EXEC"
+
+          # Prepare output directory
+          rm -rf test_output || true
+          mkdir -p test_output
+
+          # Run batch conversion over examples/input and capture logs
+          echo "Running batch conversion on examples/input..."
+          "$EXEC" batch examples/input -o test_output -t unity --verbose > test_log.txt 2>&1 || true
+          EXIT_CODE=$?
+          echo "Batch command exit code: $EXIT_CODE"
+          echo "--- Log (first 200 lines) ---"
+          head -200 test_log.txt || true
+
+          # Fail if CLI crashed (non-zero exit code)
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "ERROR: VoxBridge CLI returned non-zero exit code during test."
+            cat test_log.txt || true
+            exit 1
+          fi
+
+          # Fail the test if any fallback or Node-missing messages were detected
+          if grep -iE "node.js not available|node not available|fallback|falling back|no such file or directory: 'node'" test_log.txt >/dev/null 2>&1; then
+            echo "ERROR: Detected Node fallback or 'Node not available' in test logs."
+            sed -n '1,200p' test_log.txt || true
+            exit 1
+          fi
+
+          echo "Test run passed: CLI ran successfully and no Node fallback detected."
+          echo "Test outputs (top files):"
+          find test_output -type f -maxdepth 3 | head -50 || true
 
   # -----------------------
   # Release job - only runs on tag if build+test succeeded
   # -----------------------
   release:
-    needs: [build]
+    needs: [build, test]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
