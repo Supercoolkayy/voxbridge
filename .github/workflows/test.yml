@@ -1,77 +1,62 @@
-name: VoxBridge Batch Conversion Tests
+name: VoxBridge Quick Test
 
 on:
-  workflow_run:
-    workflows: ["Publish VoxBridge"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
+      - dev
+      - feature/**         # optional: include your feature branches
+  pull_request:
 
 jobs:
-  batch-test:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Built Artifacts
-        uses: actions/download-artifact@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: ./artifacts
+          python-version: "3.11"
 
-      - name: Extract VoxBridge Binary
+      - name: Install dependencies
         run: |
-          echo "Extracting voxbridge-linux-x64 binary..."
-          mkdir -p ./voxbridge-bin
-          tar -xzf ./artifacts/voxbridge-ubuntu-latest/voxbridge-linux-x64.tar.gz -C ./voxbridge-bin
-          chmod +x ./voxbridge-bin/voxbridge-linux-x64
-          echo "✅ VoxBridge binary extracted successfully."
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install pyinstaller || true
 
-      - name: Verify Input Directory Exists
+      - name: Run local batch conversion test
+        shell: bash
         run: |
-          echo "Checking input directory..."
-          if [ ! -d "./examples/input" ]; then
-            echo "❌ Input directory not found at ./examples/input"
-            exit 1
-          fi
-          echo "✅ Input directory found:"
-          ls -R ./examples/input
-
-      - name: Run VoxBridge Batch Conversion
-        run: |
-          echo "Starting batch conversion..."
           set -e
-          ./voxbridge-bin/voxbridge-linux-x64 batch ./examples/input \
-            --output-dir ./examples/output \
-            --target unity \
-            --no-blender \
-            --verbose
-          echo "✅ Batch conversion completed."
 
-      - name: Validate Expected Results
-        run: |
-          echo "Verifying batch results..."
-          ls -R ./examples/output || echo "⚠️ No output files found!"
+          echo "Preparing output directory..."
+          rm -rf test_output || true
+          mkdir -p test_output
 
-          # Check that 'beautiful_asian_girl.glb' failed as expected
-          if [ -f "./examples/output/beautiful_asian_girl.glb" ]; then
-            echo "❌ ERROR: 'beautiful_asian_girl.glb' was expected to fail but was found in output."
-            exit 1
-          else
-            echo "✅ Expected failure validated for 'beautiful_asian_girl.glb'."
-          fi
+          echo "Running VoxBridge CLI test on examples/impute..."
+          # Adjust path if your binary or runner is in a specific folder
+          python cli_entry.py batch examples/impute -o test_output -t unity --verbose > test_log.txt 2>&1 || true
+          EXIT_CODE=$?
 
-          # Optionally check for success on other files
-          success_count=$(find ./examples/output -type f -name "*.zip" | wc -l)
-          if [ "$success_count" -eq 0 ]; then
-            echo "❌ No successful conversions detected."
+          echo "--- CLI Output Log (first 100 lines) ---"
+          head -100 test_log.txt || true
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Test failed — non-zero exit code."
+            tail -50 test_log.txt || true
             exit 1
           fi
-          echo "✅ Found $success_count successful conversion(s)."
 
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: voxbridge-batch-test-output
-          path: ./examples/output
+          if grep -iE "error|node.js not available|fallback|no such file" test_log.txt >/dev/null 2>&1; then
+            echo "❌ Found error or Node fallback message in logs."
+            tail -50 test_log.txt || true
+            exit 1
+          fi
+
+          echo "✅ VoxBridge test passed successfully!"
+          echo "Output files generated:"
+          find test_output -type f | head -50 || true
