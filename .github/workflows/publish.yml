@@ -251,15 +251,13 @@ jobs:
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
           
-          # Copy Unity tools for users
+          # Copy Unity tools with simple setup guide
           mkdir -p release/voxbridge/unity_tools
-          cp node_scripts/UnityLODGenerator.cs release/voxbridge/unity_tools/ || true
-          cp node_scripts/VoxbridgeImport.cs release/voxbridge/unity_tools/ || true
-          
-          # Copy key documentation
-          cp README.md release/voxbridge/ || true
+          cp unity_tools/UnityLODGenerator.cs release/voxbridge/unity_tools/ || true
+          cp unity_tools/VoxbridgeImport.cs release/voxbridge/unity_tools/ || true
+          cp unity_tools/README.md release/voxbridge/unity_tools/ || true
 
-          echo "Package created with executables and Unity tools:"
+          echo "Clean package created with executables and Unity tools:"
           ls -la release/voxbridge/
           echo "Unity tools:"
           ls -la release/voxbridge/unity_tools/ || true
