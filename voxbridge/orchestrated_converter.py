@@ -352,14 +352,26 @@ class OrchestratedConverter:
             if self.debug:
                 logger.info(f"Running Node.js command: {' '.join(cmd)}")
             
-            # Run Node.js processing
+            # Run Node.js processing with correct working directory
+            # Use the node_scripts directory as cwd if it exists, otherwise use current directory
+            node_scripts_dir = Path(__file__).parent.parent / "node_scripts"
+            if not node_scripts_dir.exists():
+                # Try bundled location
+                node_scripts_dir = get_resource_path("node_scripts")
+            
+            # Use node_scripts directory or fallback to parent directory
+            work_dir = node_scripts_dir if node_scripts_dir.exists() else node_runner_path.parent
+            
+            if self.debug:
+                logger.info(f"Using working directory: {work_dir}")
+            
             process_result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
                 errors='replace',  # Replace invalid characters instead of failing
-                cwd=node_runner_path.parent
+                cwd=str(work_dir)  # Fixed: use proper working directory
             )
             
             if process_result.returncode != 0:
@@ -439,6 +451,31 @@ class OrchestratedConverter:
                     result['success'] = False
                     result['error'] = "No output file generated"
                     result['fallback_used'] = True
+            
+            # CRITICAL: Apply Unity-specific texture remapping after Node processing
+            # This fixes the gray material issue in Unity by packing PBR texture channels
+            if result['success'] and target == 'unity':
+                try:
+                    logger.info("Applying Unity texture remapping after Node processing...")
+                    from .texture_optimizer import remap_textures_for_unity
+                    
+                    # Call the texture remapper
+                    remap_result = remap_textures_for_unity(output_dir, input_path.stem, options)
+                    
+                    if remap_result['success']:
+                        logger.info(f"✓ {remap_result['message']}")
+                        result['texture_remapping'] = remap_result
+                    else:
+                        logger.warning(f"Unity texture remapping failed: {remap_result.get('error', 'Unknown error')}")
+                        result['warnings'].append(f"Texture remapping failed: {remap_result.get('error', 'Unknown')}")
+                        # Don't fail the entire conversion, just log the warning
+                        
+                except ImportError as e:
+                    logger.warning(f"Could not import texture_optimizer (PIL missing?): {e}")
+                    result['warnings'].append("Texture remapping skipped: PIL not available in bundle")
+                except Exception as e:
+                    logger.warning(f"Unity texture remapping error: {e}")
+                    result['warnings'].append(f"Texture remapping error: {str(e)}")
             
             return result
             
@@ -818,7 +855,8 @@ class OrchestratedConverter:
                                             else:
                                                 zip_path = file_info.filename
                                         elif file_info.filename.endswith(('.png', '.jpg', '.jpeg')):
-                                            zip_path = f'textures/{Path(file_info.filename).name}'
+                                            # Keep textures in root directory (flat structure for Unity compatibility)
+                                            zip_path = Path(file_info.filename).name
                                         else:
                                             zip_path = file_info.filename
                                         
@@ -859,7 +897,8 @@ class OrchestratedConverter:
                             continue
                         
                         if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg']:
-                            zip_path = f'textures/{file_path.name}'
+                            # Keep textures in root directory (flat structure for Unity compatibility)
+                            zip_path = file_path.name
                         elif file_path.suffix.lower() == '.bin' and model_name in file_path.name:
                             zip_path = f'{model_name}_{target}.bin'
                         elif file_path.name == 'voxbridge_report.json' or file_path.name == 'report.json':
@@ -875,7 +914,7 @@ class OrchestratedConverter:
                 # Create standard structure info
                 package_info['structure'] = {
                     'model': any(f.endswith(('.gltf', '.glb')) for f in package_info['files']),
-                    'textures': any(f.startswith('textures/') for f in package_info['files']),
+                    'textures': any(f.endswith(('.png', '.jpg', '.jpeg')) for f in package_info['files']),
                     'report': 'report.json' in package_info['files']
                 }
             
@@ -913,7 +952,7 @@ class OrchestratedConverter:
                 # Create standard structure info
                 package_info['structure'] = {
                     'model': any(f.endswith(('.gltf', '.glb')) for f in package_info['files']),
-                    'textures': any(f.startswith('textures/') or f.endswith(('.png', '.jpg', '.jpeg')) for f in package_info['files']),
+                    'textures': any(f.endswith(('.png', '.jpg', '.jpeg')) for f in package_info['files']),
                     'report': any(f.endswith('report.json') for f in package_info['files'])
                 }
             
@@ -967,7 +1006,8 @@ class OrchestratedConverter:
                         elif file_info.filename.endswith('.bin') and model_name in file_info.filename:
                             clean_path = f'{model_name}_{target}.bin'
                         elif file_info.filename.endswith(('.png', '.jpg', '.jpeg')):
-                            clean_path = f'textures/{Path(file_info.filename).name}'
+                            # Keep textures in root directory (flat structure for Unity compatibility)
+                            clean_path = Path(file_info.filename).name
                         elif file_info.filename == 'report.json':
                             clean_path = 'report.json'
                         else:
@@ -978,12 +1018,12 @@ class OrchestratedConverter:
                         package_info['files'].append(clean_path)
                         package_info['total_size'] += len(file_data)
                     
-                    # Create structure info
-                    package_info['structure'] = {
-                        'model': any(f.endswith(('.gltf', '.glb')) for f in package_info['files']),
-                        'textures': any(f.startswith('textures/') for f in package_info['files']),
-                        'report': 'report.json' in package_info['files']
-                    }
+                # Create structure info
+                package_info['structure'] = {
+                    'model': any(f.endswith(('.gltf', '.glb')) for f in package_info['files']),
+                    'textures': any(f.endswith(('.png', '.jpg', '.jpeg')) for f in package_info['files']),
+                    'report': 'report.json' in package_info['files']
+                }
             
             # Replace original with clean version
             shutil.move(str(temp_zip_path), package_path)

@@ -554,6 +554,78 @@ def pack_unity_pbr_textures(gltf_path, output_dir=None):
             'traceback': traceback.format_exc()
         }
 
+def remap_textures_for_unity(output_dir, model_name, options=None):
+    """
+    Remap textures for Unity after Node processing.
+    This is the main entry point that should be called after Node.js GLB/GLTF generation.
+    
+    Performs Unity-specific texture channel packing:
+    - Combines metallic/smoothness channels
+    - Handles spec-gloss conversions if needed
+    - Packs channels into Unity's Standard Shader format
+    
+    Args:
+        output_dir: Path or str - Directory containing the GLTF files
+        model_name: str - Base name of the model
+        options: dict - Optional processing options
+        
+    Returns:
+        dict with 'success', 'message', and optional 'error' keys
+    """
+    if options is None:
+        options = {}
+    
+    try:
+        output_dir = Path(output_dir)
+        if not output_dir.exists():
+            return {'success': False, 'error': f'Output directory not found: {output_dir}'}
+        
+        # Find GLTF files in the output directory
+        gltf_files = list(output_dir.glob('*.gltf'))
+        
+        if not gltf_files:
+            return {'success': True, 'message': 'No GLTF files found to process'}
+        
+        results = []
+        for gltf_file in gltf_files:
+            print(f"Remapping textures for Unity: {gltf_file.name}")
+            
+            # Apply Unity-specific PBR texture packing
+            pack_result = pack_unity_pbr_textures(gltf_file, output_dir)
+            results.append(pack_result)
+            
+            if pack_result['success']:
+                packed_count = pack_result.get('packed_count', 0)
+                print(f"[OK] Unity texture packing complete: {packed_count} material(s) packed")
+            else:
+                print(f"[ERROR] Unity texture packing failed: {pack_result.get('error', 'Unknown error')}")
+        
+        # Check if all succeeded
+        all_success = all(r['success'] for r in results)
+        total_packed = sum(r.get('packed_count', 0) for r in results)
+        
+        if all_success:
+            return {
+                'success': True,
+                'message': f'Unity texture remapping complete: {total_packed} material(s) packed',
+                'packed_count': total_packed
+            }
+        else:
+            errors = [r.get('error', 'Unknown') for r in results if not r['success']]
+            return {
+                'success': False,
+                'error': f'Some texture remapping failed: {"; ".join(errors)}',
+                'partial_success': True
+            }
+    
+    except Exception as e:
+        import traceback
+        return {
+            'success': False,
+            'error': f'Unity texture remapping failed: {e}',
+            'traceback': traceback.format_exc()
+        }
+
 def simplify_for_roblox(gltf_path, output_dir=None):
     """
     Simplify GLTF for Roblox: Keep only BaseColor (Albedo) and Normal maps.

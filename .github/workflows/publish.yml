@@ -155,12 +155,23 @@ jobs:
             --hidden-import voxbridge.cli \
             --hidden-import PIL \
             --hidden-import PIL.Image \
+            --hidden-import PIL.ImageFilter \
+            --hidden-import PIL.ImageChops \
+            --hidden-import PIL.ImageOps \
+            --hidden-import PIL.ImageEnhance \
+            --hidden-import PIL._imaging \
             --hidden-import pygltflib \
+            --hidden-import trimesh \
+            --hidden-import numpy \
             --exclude-module matplotlib \
             --exclude-module pandas \
             --exclude-module jupyter \
             --exclude-module IPython \
             --collect-all voxbridge \
+            --collect-all PIL \
+            --collect-all trimesh \
+            --collect-all pygltflib \
+            --collect-all numpy \
             cli_entry.py
 
           echo "CLI build completed"
@@ -204,12 +215,23 @@ jobs:
             --hidden-import voxbridge.gui.app \
             --hidden-import PIL \
             --hidden-import PIL.Image \
+            --hidden-import PIL.ImageFilter \
+            --hidden-import PIL.ImageChops \
+            --hidden-import PIL.ImageOps \
+            --hidden-import PIL.ImageEnhance \
+            --hidden-import PIL._imaging \
             --hidden-import pygltflib \
+            --hidden-import trimesh \
+            --hidden-import numpy \
             --exclude-module matplotlib \
             --exclude-module pandas \
             --exclude-module jupyter \
             --exclude-module IPython \
             --collect-all voxbridge \
+            --collect-all PIL \
+            --collect-all trimesh \
+            --collect-all pygltflib \
+            --collect-all numpy \
             gui_entry.py
 
           echo "GUI build completed"

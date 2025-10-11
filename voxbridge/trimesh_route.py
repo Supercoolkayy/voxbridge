@@ -156,28 +156,51 @@ class TrimeshRoute:
             }
     
     def _optimize_mesh(self, scene, options: Dict[str, Any]) -> Any:
-        """Apply mesh optimizations"""
+        """Apply mesh optimizations with detailed stats"""
         try:
             if self.debug:
                 logger.info("Applying mesh optimizations")
             
             # Simplify meshes if requested
             simplify_ratio = options.get('simplify_ratio', 0.3)
+            optimize_enabled = options.get('optimize_mesh', False)
+            
+            if not optimize_enabled:
+                logger.info("Mesh optimization disabled - preserving original geometry")
+                return scene
+            
+            total_before = 0
+            total_after = 0
             
             for name, geom in scene.geometry.items():
-                if hasattr(geom, 'simplify_quadric_decimation'):
+                if hasattr(geom, 'faces') and hasattr(geom, 'simplify_quadric_decimation'):
                     try:
+                        faces_before = geom.faces.shape[0]
+                        total_before += faces_before
+                        
+                        # Target 70% of original (30% reduction)
+                        target_faces = int(faces_before * 0.7)
+                        
                         # Simplify the mesh
-                        simplified = geom.simplify_quadric_decimation(
-                            face_count=int(geom.faces.shape[0] * (1 - simplify_ratio))
-                        )
+                        simplified = geom.simplify_quadric_decimation(face_count=target_faces)
                         scene.geometry[name] = simplified
                         
-                        if self.debug:
-                            logger.info(f"Simplified {name}: {geom.faces.shape[0]} -> {simplified.faces.shape[0]} faces")
+                        faces_after = simplified.faces.shape[0]
+                        total_after += faces_after
+                        reduction = faces_before - faces_after
+                        reduction_pct = (reduction / faces_before * 100) if faces_before > 0 else 0
+                        
+                        logger.info(f"Simplified {name}: {faces_before} → {faces_after} faces (-{reduction_pct:.1f}%)")
                             
                     except Exception as e:
                         logger.warning(f"Could not simplify {name}: {e}")
+                        if hasattr(geom, 'faces'):
+                            total_before += geom.faces.shape[0]
+                            total_after += geom.faces.shape[0]
+            
+            if total_before > 0:
+                overall_reduction = (total_before - total_after) / total_before * 100
+                logger.info(f"Total mesh reduction: {total_before} → {total_after} triangles (-{overall_reduction:.1f}%)")
             
             return scene
             

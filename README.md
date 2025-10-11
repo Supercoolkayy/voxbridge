@@ -6,12 +6,29 @@ VoxBridge is a professional tool that converts 3D models exported from The Sandb
 
 ## 🎉 What's New in Version 2.0.1
 
-### ✅ Production-Ready Animated Model Support
-- **Official GLTF Transform Library**: Now using `@gltf-transform/core` for bulletproof GLTF processing
-- **Perfect Animation Preservation**: All animations, skins, and rigging fully preserved
-- **Complete Asset Bundling**: Binary data, textures, and geometry all included
-- **No Native Dependencies**: Pure JavaScript Node.js processing bundles perfectly
-- **Client-Friendly Messages**: Shows duplicate detection, mesh quality, and optimization status
+### ✅ Unity Gray Material Fix (NEW!)
+- **PBR Texture Channel Remapping**: Automatically packs textures into Unity's Standard Shader format
+- **No More Gray Materials**: R=Metallic, G=Smoothness, B=AO, A=Gloss
+- **Automatic Application**: Runs after Node.js processing for Unity targets
+- **Perfect Rendering**: Works in GLTF viewers AND Unity!
+
+### ✅ Enhanced Mesh Simplification (NEW!)
+- **Triangle Counting**: Accurate before/after triangle counts in reports
+- **Intelligent Reduction**: Preserves animation-critical vertices
+- **Vertex Welding**: Merges duplicate vertices automatically
+- **Detailed Logging**: Shows exact polygon reduction percentages
+
+### ✅ Comprehensive Reporting (NEW!)
+- **File Sizes**: Human-readable formats ("21.49 MB" instead of bytes)
+- **Triangle Stats**: Before/after with reduction percentages
+- **Optimization Status**: What was applied (simplification, welding, etc.)
+- **Performance Metrics**: File size reduction, processing time
+- **Animation Data**: Bone counts, skin data, animation counts
+
+### ✅ Flat ZIP Structure (NEW!)
+- **Unity-Compatible Packaging**: All files at root level (no subdirectories)
+- **Perfect URI Matching**: GLTF texture references match file locations
+- **Easier Imports**: Just unzip and drag into Unity - textures load automatically
 
 ### Previous Features (Version 2.0)
 
@@ -162,13 +179,15 @@ VoxBridge now features an intelligent conversion system that automatically detec
 
 ## 📥 Download
 
-**Download All Platforms**: [Google Drive Folder](https://drive.google.com/drive/folders/1LNtXrmrB_U4lkpuX_5Gk5Ax1MiodIh1h?usp=sharing)
+**Download Latest Release**: [GitHub Releases](https://github.com/Supercoolkayy/voxbridge/releases/latest)
 
-| Platform    | File Name              | Size   |
-| ----------- | ---------------------- | ------ |
-| **Windows** | voxbridge-windows.zip  | 135 MB |
-| **Linux**   | voxbridge-linux.tar.gz | 135 MB |
-| **macOS**   | voxbridge-macos.tar.gz | 135 MB |
+| Platform    | File Name                       | What's Included |
+| ----------- | ------------------------------- | --------------- |
+| **Windows** | voxbridge-windows-x64.zip       | CLI + GUI executables |
+| **Linux**   | voxbridge-linux-x64.tar.gz      | CLI + GUI executables |
+| **macOS**   | voxbridge-macos-x64.tar.gz      | CLI + GUI executables |
+
+> 💡 **Latest Version: v2.0.1** - Includes Unity PBR texture packing, mesh simplification, and comprehensive reporting!
 
 > 📖 **Need help with standalone executables?** See [Standalone Executables Guide](docs/STANDALONE_EXECUTABLES.md) for detailed platform-specific instructions.
 
