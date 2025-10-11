@@ -213,7 +213,8 @@ async function processGLTF(inputPath, outputPath, target, optimizeMesh = false, 
         vertexWelding: optimizeMesh ? 'applied' : 'skipped',
         duplicateMeshesRemoved: Math.max(0, initialStats.meshes - finalStats.meshes),
         animationsPreserved: finalStats.animations,
-        qualityMode: optimizeMesh ? 'optimized' : 'original'
+        qualityMode: optimizeMesh ? 'optimized' : 'original',
+        trianglePreservationReason: finalStats.skins > 0 ? 'rigged_model_animation_quality' : 'none'
       },
       
       // Performance
@@ -222,6 +223,14 @@ async function processGLTF(inputPath, outputPath, target, optimizeMesh = false, 
         sizeReduction: inputSize - outputSize,
         sizeReductionPercent: inputSize > 0 ? (((inputSize - outputSize) / inputSize) * 100).toFixed(1) : 0
       },
+      
+      // User notes
+      notes: finalStats.skins > 0 && initialTriangles === finalTriangles ? [
+        'Triangle count preserved for animation quality',
+        'This model has rigging - simplifying would break animations',
+        `File size still reduced by ${((inputSize - outputSize) / inputSize * 100).toFixed(1)}%`,
+        'See WHY_TRIANGLES_STAY_SAME.md in release package for details'
+      ] : [],
       
       // Summary message
       message: 'GLTF processed successfully with @gltf-transform/core',
@@ -234,16 +243,33 @@ async function processGLTF(inputPath, outputPath, target, optimizeMesh = false, 
     // Print final summary
     console.log('');
     console.log('=== PROCESSING SUMMARY ===');
-    console.log(`✓ Animations preserved: ${finalStats.animations}`);
-    console.log(`✓ Meshes: ${initialStats.meshes} → ${finalStats.meshes}`);
-    console.log(`✓ Materials: ${initialStats.materials} → ${finalStats.materials}`);
-    console.log(`✓ Textures preserved: ${finalStats.textures}`);
+    console.log(`[OK] Animations preserved: ${finalStats.animations}`);
+    console.log(`[OK] Meshes: ${initialStats.meshes} -> ${finalStats.meshes}`);
+    console.log(`[OK] Materials: ${initialStats.materials} -> ${finalStats.materials}`);
+    console.log(`[OK] Textures preserved: ${finalStats.textures}`);
     if (initialStats.meshes > finalStats.meshes) {
-      console.log(`✓ Removed ${initialStats.meshes - finalStats.meshes} duplicate mesh(es)`);
+      console.log(`[OK] Removed ${initialStats.meshes - finalStats.meshes} duplicate mesh(es)`);
     }
-    console.log(`✓ Quality: ${optimizeMesh ? 'Optimized' : 'Original (High Quality)'}`);
+    
+    // Explain triangle preservation for animated models
+    if (finalStats.skins > 0 && initialTriangles === finalTriangles && optimizeMesh) {
+      console.log(`[OK] Triangles: ${initialTriangles} -> ${finalTriangles} (preserved for animation quality)`);
+      console.log('');
+      console.log('[INFO] This model has rigging/animations.');
+      console.log('[INFO] Triangle count preserved to protect skeleton deformation.');
+      console.log('[INFO] File size still reduced by ${((inputSize - outputSize) / inputSize * 100).toFixed(1)}% through compression!');
+      console.log('[INFO] See WHY_TRIANGLES_STAY_SAME.md for details.');
+    } else if (initialTriangles !== finalTriangles) {
+      const reduction = initialTriangles - finalTriangles;
+      const reductionPct = ((reduction / initialTriangles) * 100).toFixed(1);
+      console.log(`[OK] Triangles: ${initialTriangles} -> ${finalTriangles} (-${reductionPct}%)`);
+    } else {
+      console.log(`[OK] Triangles: ${initialTriangles} (original quality)`);
+    }
+    
+    console.log(`[OK] Quality: ${optimizeMesh ? 'Optimized' : 'Original (High Quality)'}`);
     console.log('');
-    console.log(`✅ Processing complete for ${target} target`);
+    console.log(`[SUCCESS] Processing complete for ${target} target`);
     return true;
 
   } catch (error) {

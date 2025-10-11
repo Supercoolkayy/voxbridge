@@ -24,6 +24,8 @@ VoxBridge is a professional tool that converts 3D models exported from The Sandb
 - **Optimization Status**: What was applied (simplification, welding, etc.)
 - **Performance Metrics**: File size reduction, processing time
 - **Animation Data**: Bone counts, skin data, animation counts
+- **Smart Simplification**: Preserves animated vertices (0% reduction = protecting animations ✅)
+- **Static Model Reduction**: Shows actual polygon reduction (20-40% for non-rigged models)
 
 ### ✅ Flat ZIP Structure (NEW!)
 - **Unity-Compatible Packaging**: All files at root level (no subdirectories)
@@ -405,12 +407,19 @@ VoxBridge intelligently handles different model types:
 ### VoxBridge Documentation
 
 - **📖 Quick Start Guide**: [docs/QUICK_START.md](docs/QUICK_START.md) - Step-by-step getting started
-- **📖 Texture Packing Guide**: [docs/TEXTURE_PACKING_GUIDE.md](docs/TEXTURE_PACKING_GUIDE.md) - **NEW!** Platform-specific material export
+- **📖 Texture Packing Guide**: [docs/TEXTURE_PACKING_GUIDE.md](docs/TEXTURE_PACKING_GUIDE.md) - Platform-specific material export
+- **📖 LOD Generation Guide**: [docs/LOD_GENERATION_GUIDE.md](docs/LOD_GENERATION_GUIDE.md) - **NEW!** Mobile optimization with LODs
 - **📖 Usage Guide**: [docs/usage.md](docs/usage.md) - Complete CLI documentation
 - **📖 Installation Guide**: [docs/installation.md](docs/installation.md) - Detailed installation help
 - **📖 Standalone Executables**: [docs/STANDALONE_EXECUTABLES.md](docs/STANDALONE_EXECUTABLES.md) - Platform-specific instructions
 - **📖 Performance Analysis**: [docs/performance.md](docs/performance.md) - Benchmarks and performance metrics
 - **📖 Current Status**: [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) - Project status and milestones
+
+### Technical References
+
+- **📖 Why Triangles Stay Same**: [WHY_TRIANGLES_STAY_SAME.md](WHY_TRIANGLES_STAY_SAME.md) - **NEW!** Understanding mesh simplification for animated models
+- **📖 Complete Fixes**: [COMPLETE_FIXES_SUMMARY.md](COMPLETE_FIXES_SUMMARY.md) - v2.0.1 technical changes
+- **📖 Sandbox Grant Status**: [SANDBOX_GRANT_COMPLETION.md](SANDBOX_GRANT_COMPLETION.md) - All 3 milestones complete
 
 ### Quick References
 

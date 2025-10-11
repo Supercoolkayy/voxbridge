@@ -247,12 +247,24 @@ jobs:
 
           echo "Copying files to release package..."
 
-          # Copy ONLY the two main executables (clean package)
+          # Copy the two main executables
           cp dist/voxbridge${{ matrix.ext }} release/voxbridge/ || true
           cp dist/voxbridge-gui${{ matrix.ext }} release/voxbridge/ || true
+          
+          # Copy Unity tools for users
+          mkdir -p release/voxbridge/unity_tools
+          cp node_scripts/UnityLODGenerator.cs release/voxbridge/unity_tools/ || true
+          cp node_scripts/VoxbridgeImport.cs release/voxbridge/unity_tools/ || true
+          
+          # Copy key documentation
+          cp README.md release/voxbridge/ || true
+          cp WHY_TRIANGLES_STAY_SAME.md release/voxbridge/ || true
+          cp docs/LOD_GENERATION_GUIDE.md release/voxbridge/unity_tools/ || true
 
-          echo "Clean package created with only executables:"
+          echo "Package created with executables and Unity tools:"
           ls -la release/voxbridge/
+          echo "Unity tools:"
+          ls -la release/voxbridge/unity_tools/ || true
 
           # List what we have
           echo "Package contents (top 200 files):"
