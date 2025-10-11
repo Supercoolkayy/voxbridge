@@ -258,8 +258,6 @@ jobs:
           
           # Copy key documentation
           cp README.md release/voxbridge/ || true
-          cp WHY_TRIANGLES_STAY_SAME.md release/voxbridge/ || true
-          cp docs/LOD_GENERATION_GUIDE.md release/voxbridge/unity_tools/ || true
 
           echo "Package created with executables and Unity tools:"
           ls -la release/voxbridge/
