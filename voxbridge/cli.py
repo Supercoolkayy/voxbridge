@@ -228,76 +228,34 @@ def handle_conversion(
     try:
         # Step 1: Environment Setup
         print_step_header(1, 4, "Environment Setup")
-        
-        # Check Blender availability
-        blender_path = None
-        try:
-            import subprocess
-            result = subprocess.run(['which', 'blender'], capture_output=True, text=True)
-            if result.returncode == 0:
-                blender_path = result.stdout.strip()
-                print_step_info(f"Blender: detected at {blender_path}", 1)
-            else:
-                print_step_info("Blender: not found", 1)
-        except:
-            print_step_info("Blender: detection failed", 1)
-        
-        if blender_path and not no_blender:
-            print_step_info("Cleanup script: voxbridge/blender_cleanup.py", 1)
-            print_step_info("Using Blender for conversion", 1)
-        else:
-            print_step_info("Cleanup script: voxbridge/blender_cleanup.py", 1)
-            print_step_info("Using fallback conversion (Blender skipped)", 1)
+        print_step_info("Using OrchestratedConverter (Node.js + Python paths)", 1)
         
         # Step 2: File Processing
         print_step_header(2, 4, "File Processing")
         
-        # Initialize converter
-        converter = VoxBridgeConverter(debug=debug)
+        # Initialize orchestrated converter (gets all fixes: Unity texture remapping, mesh simplification, etc.)
+        converter = OrchestratedConverter(debug=debug)
         
-        # Show progress bar for file processing
-        if RICH_AVAILABLE and not verbose:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TimeElapsedColumn(),
-                console=console
-            ) as progress:
-                task = progress.add_task("Processing GLB file...", total=100)
-                
-                # Simulate progress updates
-                progress.update(task, advance=25)
-                time.sleep(0.1)
-                
-                # Process the file
-                result = converter.convert_file(
-                    input_path,
-                    output_path,
-                    use_blender=not no_blender,
-                    optimize_mesh=optimize_mesh,
-                    generate_atlas=generate_atlas,
-                    platform=target
-                )
-                
-                if result:
-                    progress.update(task, completed=100, description="[bold green]Completed!")
-                else:
-                    progress.update(task, completed=100, description="[bold red]Failed!")
-        else:
-            # No progress bar in verbose mode
-            result = converter.convert_file(
-                input_path,
-                output_path,
-                use_blender=not no_blender,
-                optimize_mesh=optimize_mesh,
-                generate_atlas=generate_atlas,
-                platform=target
-            )
+        # Prepare options
+        options = {
+            'optimize_mesh': optimize_mesh,
+            'generate_atlas': generate_atlas,
+            'no_blender': no_blender
+        }
         
-        if not result:
+        # Process the file with OrchestratedConverter
+        conversion_result = converter.convert_file(
+            input_path=input_path,
+            output_dir=output_path.parent,
+            target=target,
+            options=options
+        )
+        
+        if not conversion_result or not conversion_result.get('success'):
             print_step_info("Conversion failed", 1)
             return False
+        
+        result = conversion_result.get('success', False)
                 
         # Check if we got a ZIP file back from the converter
         final_output_path = output_path
@@ -677,13 +635,16 @@ def benchmark(
     
     console.print(f"Found {len(glb_files)} test assets for benchmarking")
     
-    # Initialize converter with benchmark support
-    from .converter import VoxBridgeConverter
-    converter = VoxBridgeConverter(debug=verbose)
+    # Initialize orchestrated converter for benchmarking (gets all fixes)
+    from .orchestrated_converter import OrchestratedConverter
+    converter = OrchestratedConverter(debug=verbose)
     
-    # Enable optimizations for benchmarking
-    converter.optimization_settings['mesh_optimization'] = optimize_mesh
-    converter.optimization_settings['texture_atlas'] = True
+    # Prepare optimization options
+    options = {
+        'optimize_mesh': optimize_mesh,
+        'generate_atlas': True,  # Enable for benchmarking
+        'no_blender': False
+    }
     
     benchmark_results = {}
     success_count = 0
@@ -691,15 +652,18 @@ def benchmark(
     for glb_file in glb_files:
         console.print(f"\n[bold cyan]Benchmarking {glb_file.name}...")
         
-        # Convert with optimizations
-        output_file = output_dir / f"{glb_file.stem}_optimized"
-        success = converter.convert_file(
+        # Convert with optimizations using OrchestratedConverter
+        file_output_dir = output_dir / glb_file.stem
+        file_output_dir.mkdir(exist_ok=True)
+        
+        result = converter.convert_file(
             input_path=glb_file,
-            output_path=output_file,
-            platform=target,
-            optimize_mesh=optimize_mesh,
-            use_blender=True
+            output_dir=file_output_dir,
+            target=target,
+            options=options
         )
+        
+        success = result.get('success', False) if result else False
         
         if success:
             success_count += 1
