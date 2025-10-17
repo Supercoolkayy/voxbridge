@@ -291,6 +291,7 @@ async function applyRobloxOptimizations(document, options) {
   // Remove animations (Roblox doesn't support GLTF animations)
   const animations = root.listAnimations();
   if (animations && animations.length > 0) {
+    console.log(`Removing ${animations.length} animations for Roblox compatibility`);
     for (const animation of animations) {
       animation.dispose();
     }
@@ -299,6 +300,7 @@ async function applyRobloxOptimizations(document, options) {
   // Remove skins (Roblox handles rigging differently)
   const skins = root.listSkins();
   if (skins && skins.length > 0) {
+    console.log(`Removing ${skins.length} skins for Roblox compatibility`);
     for (const skin of skins) {
       skin.dispose();
     }
@@ -312,10 +314,22 @@ async function applyUnityOptimizations(document, options) {
   console.log("Applying Unity optimizations...");
 
   // Unity-specific optimizations
-  // - Basic optimizations for Unity compatibility
-  // - Focus on core functionality without complex material operations
+  // - PRESERVE animations and skins for Unity compatibility
+  // - Focus on core functionality without removing complex features
 
   const root = document.getRoot();
+
+  // Check what we're preserving for Unity
+  const animations = root.listAnimations();
+  const skins = root.listSkins();
+  
+  if (animations && animations.length > 0) {
+    console.log(`✓ Preserving ${animations.length} animations for Unity`);
+  }
+  
+  if (skins && skins.length > 0) {
+    console.log(`✓ Preserving ${skins.length} skins for Unity`);
+  }
 
   // Basic Unity optimizations - just ensure the document is valid
   console.log(`Optimizing ${root.listMeshes().length} meshes for Unity`);

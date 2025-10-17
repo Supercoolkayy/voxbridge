@@ -59,8 +59,8 @@ cp -r node_scripts/node_modules build/node_binary/
 
 # Create a bundled Node.js script
 print_status "Creating bundled Node.js script..."
-# Copy the full process_complex.js instead of using a stub
-cp node_scripts/process_complex.js build/node_binary/voxbridge_node.js
+# Copy the simple_processor.js instead of process_complex.js to preserve animations
+cp node_scripts/simple_processor.js build/node_binary/voxbridge_node.js
 chmod +x build/node_binary/voxbridge_node.js
 
 # Comment out the old heredoc stub creation
