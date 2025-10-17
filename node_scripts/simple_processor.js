@@ -140,6 +140,9 @@ async function processGLTF(inputPath, outputPath, target, optimizeMesh = false, 
       console.log(`Output written to: ${gltfOutputPath}`);
     }
 
+    // Apply sampler correction for all targets to ensure proper texture appearance
+    await applySamplerCorrection(gltfOutputPath, verbose);
+
     // Get final stats after all transformations
     const finalRoot = document.getRoot();
     const finalStats = {
@@ -312,6 +315,79 @@ function formatBytes(bytes) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function applySamplerCorrection(gltfPath, verbose = false) {
+  /**
+   * Apply minimal sampler correction to ensure proper texture appearance
+   * 
+   * This function enforces the correct wrap and filter modes directly within 
+   * the exported GLTF/GLB files to prevent manual adjustment of textures in Unity.
+   * 
+   * Parameters applied:
+   * - magFilter: 9728 (NEAREST) - Point filtering for pixel-perfect voxel textures
+   * - minFilter: 9728 (NEAREST) - Point filtering for pixel-perfect voxel textures  
+   * - wrapS: 33071 (CLAMP_TO_EDGE) - Clamp wrap mode to prevent texture bleeding
+   * - wrapT: 33071 (CLAMP_TO_EDGE) - Clamp wrap mode to prevent texture bleeding
+   */
+  try {
+    if (verbose) {
+      console.log('Applying sampler correction for texture clarity...');
+    }
+
+    // Read the GLTF file
+    const gltfData = await fs.readJson(gltfPath);
+    
+    // Initialize samplers array if it doesn't exist
+    if (!gltfData.samplers) {
+      gltfData.samplers = [];
+    }
+    
+    // Define the corrected sampler parameters
+    const correctedSampler = {
+      magFilter: 9728,   // NEAREST → Point filtering for pixel-perfect textures
+      minFilter: 9728,   // NEAREST → Point filtering for pixel-perfect textures
+      wrapS: 33071,      // CLAMP_TO_EDGE → Clamp wrap mode
+      wrapT: 33071       // CLAMP_TO_EDGE → Clamp wrap mode
+    };
+    
+    // Apply correction to all existing samplers
+    let samplersCorrected = 0;
+    for (let i = 0; i < gltfData.samplers.length; i++) {
+      const sampler = gltfData.samplers[i];
+      
+      // Update sampler with corrected parameters
+      Object.assign(sampler, correctedSampler);
+      samplersCorrected++;
+    }
+    
+    // If no samplers exist, create one with corrected parameters
+    if (gltfData.samplers.length === 0) {
+      gltfData.samplers.push(correctedSampler);
+      samplersCorrected = 1;
+    }
+    
+    // Ensure all textures reference a sampler
+    if (gltfData.textures && Array.isArray(gltfData.textures)) {
+      for (const texture of gltfData.textures) {
+        if (texture.sampler === undefined) {
+          texture.sampler = 0; // Reference the first (corrected) sampler
+        }
+      }
+    }
+    
+    // Write the corrected GLTF back to file
+    await fs.writeJson(gltfPath, gltfData, { spaces: 2 });
+    
+    if (verbose) {
+      console.log(`✓ Sampler correction applied to ${samplersCorrected} sampler(s)`);
+      console.log('✓ All textures configured for pixel-perfect voxel appearance');
+    }
+    
+  } catch (error) {
+    console.warn(`⚠ Sampler correction failed: ${error.message}`);
+    // Don't fail the entire conversion, just log the warning
+  }
 }
 
 async function applyUnityModifications(document, verbose = false) {
